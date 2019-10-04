@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <netdb.h>
+#include <unistd.h>
 
 typedef enum {
     OK = 0,
@@ -22,6 +24,7 @@ typedef struct {
     char* name;
     Item* items;
     int totalItems;
+    int server;
 } Depot;
 
 Status show_message(Status s) {
@@ -96,6 +99,44 @@ int parse(int argc, char** argv, Depot *info) {
     return OK;
 }
 
+void setup_listen(Depot *info) {
+    struct addrinfo* ai = 0;
+    struct addrinfo hints;
+    memset(& hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;        // IPv6  for generic could use AF_UNSPEC
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;  // Because we want to bind with it    
+    int err;
+    if (err = getaddrinfo("localhost", 0, &hints, &ai)) { // no particular port
+        freeaddrinfo(ai);
+        fprintf(stderr, "%s\n", gai_strerror(err));
+        //return 1;   // could not work out the address
+    }
+    
+    // create a socket and bind it to a port
+    int serv = socket(AF_INET, SOCK_STREAM, 0); // 0 == use default protocol
+    if (bind(serv, (struct sockaddr*)ai->ai_addr, sizeof(struct sockaddr))) {
+        perror("Binding");
+        //return 3;
+    }
+    
+    // Which port did we get?
+    struct sockaddr_in ad;
+    memset(&ad, 0, sizeof(struct sockaddr_in));
+    socklen_t len=sizeof(struct sockaddr_in);
+    if (getsockname(serv, (struct sockaddr*)&ad, &len)) {
+        perror("sockname");
+        //return 4;
+    }
+
+    info->server = serv;
+    return 0;
+}
+
+int listen(Depot info) {
+
+}
+
 int start_up(int argc, char** argv) {
     Depot info;
 
@@ -111,7 +152,10 @@ int start_up(int argc, char** argv) {
     }
 
     // listen 
+    setup_listen(&info);
+    listen(&info);
 
+    
     return OK;
 
 }
