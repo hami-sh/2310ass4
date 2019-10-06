@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "2310depot.h"
+#include "comms.h"
 
 #define LINESIZE 500
 
@@ -81,6 +82,173 @@ int parse(int argc, char** argv, Depot *info) {
     return OK;
 }
 
+void growArray(Depot *info, Item **items, int currentSize) {
+    printf("--grow\n");
+    int totalSize = currentSize + 1;
+    Item *temp = (Item*)realloc(*items, (totalSize * sizeof(Item)));
+
+    if (temp == NULL) {
+        //todo remove
+        printf("realloc error\n");
+        return;
+    } else {
+        *items = temp;
+    }
+
+    info->totalItems = totalSize;
+}
+
+void item_add(Depot *info, Item *new) {
+    printf("--add attempt\n");
+    int found = 0;
+
+    for (int i = 0; i < info->totalItems; i++) {
+        if (strcmp(info->items[i].name, new->name) == 0) {
+            found = 1;
+            info->items[i].count += new->count;
+        }
+    }
+
+    if (found == 0) {
+        growArray(info, &info->items, info->totalItems);
+        printf("(new size %d)\n", info->totalItems);
+        info->items[info->totalItems - 1] = *new;
+    }
+
+}
+
+void depot_connect(Depot *info, char* input) {
+    input += 7;
+    if (input[0] != ':') {
+        return;
+    }
+    input++;
+
+    char* port = malloc(sizeof(char) * strlen(input) - 1);
+    strncpy(port, input, strlen(input) - 1);
+
+    // connect to port.
+    struct addrinfo* ai = 0;
+    struct addrinfo hints;
+    memset(& hints, 0, sizeof(struct addrinfo));
+    hints.ai_family=AF_INET;        // IPv6  for generic could use AF_UNSPEC
+    hints.ai_socktype=SOCK_STREAM;
+    int err;
+    if ((err=getaddrinfo("localhost", port, &hints, &ai))) {
+        freeaddrinfo(ai);
+        return;   // could not work out the address
+    }
+    int fd=socket(AF_INET, SOCK_STREAM, 0); // 0 == use default protocol
+    if (connect(fd, (struct sockaddr*)ai->ai_addr, sizeof(struct sockaddr))) {
+        return;
+    }
+    // fd is now connected
+    // we want separate streams (which we can close independently)
+    
+    int fd2=dup(fd);
+    FILE* to=fdopen(fd, "w");
+    FILE* from=fdopen(fd2, "r");
+    Connection *connection = malloc(sizeof(Connection));
+    connection->port = port;
+    connection->streamFrom = from;
+    connection->streamTo = to;
+
+    info->connections[info->currentConnected] = *connection;
+    fprintf(to, "IM:%u:%s\n", info->listeningPort, info->name);
+    fflush(to);
+}
+
+void depot_im(Depot *info, char* input) {
+    // send IM back?
+
+    // store connection info
+}
+
+void depot_deliver(Depot *info, char* input) {
+    input += 7;
+    if (input[0] != ':') {
+        return;
+    }
+    input++;
+    int numberDigits = 0;
+    int q = 0;
+    while (input[q] != ':') {
+        numberDigits++;
+        q++;
+    }
+    char* quanOrig = malloc(sizeof(char) * numberDigits);
+    strncpy(quanOrig, input, numberDigits);
+    for (int i = 0; i < numberDigits; i++) {
+        if (!isdigit(quanOrig[i])) {
+            return;
+        }
+    }
+
+    int quantity = atoi(quanOrig);
+    input += numberDigits;
+    if (input[0] != ':') {
+        return;
+    }
+    input++;
+
+    char* itemName = malloc(sizeof(char) * strlen(input));
+    strcpy(itemName, input);
+    itemName[strlen(itemName) - 1] = '\0';
+
+    if (quantity <= 0) {
+        return;
+    }
+
+    printf("in: %s %d\n", itemName, quantity);
+    Item *new = malloc(sizeof(Item));
+    new->name = itemName;
+    new->count = quantity;
+
+    item_add(info, new);
+
+    //todo DEBUG REMOVE
+    for (int i = 0; i < info->totalItems; i++) {
+        printf("%s:%d\n", info->items[i].name, info->items[i].count);
+    }
+
+
+}
+
+void depot_withdraw(Depot *info, char* input) {
+
+}
+
+void depot_transfer(Depot *info, char* input) {
+
+}
+
+void process_input(Depot *info, char* input) {
+    char *dest = malloc(sizeof(char) * strlen(input));
+
+    if (strncmp(input, "Connect", 7) == 0) {
+        // strncpy(dest, input, 4);
+        // dest[4] = 0; 
+        printf("GOT: Connect\n");
+        depot_connect(info, input);
+    } else if (strncmp(input, "IM", 2) == 0) {
+        // strncpy(dest, input, 8);
+        // dest[8] = 0;
+        printf("GOT: IM\n");
+        depot_im(info, input);
+    } else if (strncmp(input, "Deliver", 7) == 0) {
+        printf("GOT: Deliver \n");
+        depot_deliver(info, input);
+    } else if (strncmp(input, "Withdraw", 8) == 0) {
+        printf("Withdraw\n");
+    } else if (strncmp(input, "Transfer", 8) == 0) {
+        printf("Transfer\n");
+    } else if (strncmp(input, "Defer", 5) == 0) {
+        printf("Defer\n");
+    } else if (strncmp(input, "Execute", 7) == 0) {
+        printf("Execute\n");
+    }
+}
+
 void setup_listen(Depot *info) {
     struct addrinfo* ai = 0;
     struct addrinfo hints;
@@ -116,20 +284,21 @@ void setup_listen(Depot *info) {
 }
 
 void *thread_listen(void *data) {
-    DepotThread *depot = (DepotThread*) data;
+    DepotThread *depotThread = (DepotThread*) data;
 
     char input[LINESIZE];
-    fgets(input, BUFSIZ, depot->streamFrom);
+    fgets(input, BUFSIZ, depotThread->streamFrom);
     // keep reading until gameover or EOF from hub
-    while (!feof(depot->streamFrom)) {
+    while (!feof(depotThread->streamFrom)) {
         // decide what to do on message
         // int processed = process_input(input, game);
         // if (processed != 0) {
             // return processed;
         // }
-        printf("%s", input);
+        process_input(depotThread->depot, input);
+
         // get next message
-        fgets(input, BUFSIZ, depot->streamFrom);
+        fgets(input, BUFSIZ, depotThread->streamFrom);
     }
 }
 
@@ -147,6 +316,7 @@ int listening(Depot *info) {
         // fclose(stream);
 
         // do something with the connection
+        printf("--CONNECTION--\n");
 
         // get streams
         int fd2 = dup(conn_fd);
@@ -158,6 +328,7 @@ int listening(Depot *info) {
         fflush(streamTo);
 
         // spin up listening thread
+        printf("thread open\n");
         pthread_t tid;
         DepotThread *val = malloc(sizeof(DepotThread));
         val->depot = info;
@@ -184,6 +355,10 @@ int start_up(int argc, char** argv) {
     for (int i = 0; i < info.totalItems; i++) {
         printf("%s:%d\n", info.items[i].name, info.items[i].count);
     }
+
+    info.connections = malloc(3 * sizeof(Connection)); //todo realloc!
+    info.currentConnected = 0;
+    info.connectionNum = 3;
 
     // listen 
     setup_listen(&info);

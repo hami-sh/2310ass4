@@ -18,6 +18,13 @@ typedef struct {
     int count;
 } Item;
 
+typedef struct {
+    char* name;
+    char* port;
+    FILE* streamTo;
+    FILE* streamFrom;
+} Connection;
+
 
 // struct for the depot
 typedef struct {
@@ -26,6 +33,10 @@ typedef struct {
     int totalItems;
     int server;
     uint listeningPort;
+
+    Connection* connections; 
+    int connectionNum;
+    int currentConnected;
 } Depot;
 
 // struct for listening thread
