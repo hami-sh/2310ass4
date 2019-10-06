@@ -4,28 +4,10 @@
 #include <ctype.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <pthread.h>
+#include "2310depot.h"
 
-typedef enum {
-    OK = 0,
-    INCORRARGS = 1,
-    NAMEERR = 2,
-    QUANERR = 3
-} Status;
-
-// struct for items
-typedef struct {
-    char* name;
-    int count;
-} Item;
-
-
-// struct for the depot
-typedef struct {
-    char* name;
-    Item* items;
-    int totalItems;
-    int server;
-} Depot;
+#define LINESIZE 500
 
 Status show_message(Status s) {
     const char *messages[] = {"",
@@ -41,7 +23,7 @@ int check_int(char* string) {
         // check integer
         if (string[i] == '.' || string[i] == '-') {
             return show_message(QUANERR);
-        }
+        } 
         // check that dimensions supplied are digits.
         if (!isdigit(string[i])) {
             return show_message(QUANERR);
@@ -64,7 +46,7 @@ int parse(int argc, char** argv, Depot *info) {
         return show_message(NAMEERR);
     }
 
-    // illegal char
+    // illegal chars
     for (int i = 0; i < strlen(argv[1]); i++) {
         if ((argv[1][i] == ' ') || (argv[1][i] == '\n') || (argv[1][i] == '\r') 
             || (argv[1][i] == ':')) {
@@ -107,7 +89,7 @@ void setup_listen(Depot *info) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;  // Because we want to bind with it    
     int err;
-    if (err = getaddrinfo("localhost", 0, &hints, &ai)) { // no particular port
+    if ((err = getaddrinfo("localhost", 0, &hints, &ai))) { // no particular port
         freeaddrinfo(ai);
         fprintf(stderr, "%s\n", gai_strerror(err));
         //return 1;   // could not work out the address
@@ -128,12 +110,64 @@ void setup_listen(Depot *info) {
         perror("sockname");
         //return 4;
     }
-
+    printf("%u\n", ntohs(ad.sin_port));
+    info->listeningPort = ntohs(ad.sin_port);
     info->server = serv;
-    return 0;
 }
 
-int listen(Depot info) {
+void *thread_listen(void *data) {
+    DepotThread *depot = (DepotThread*) data;
+
+    char input[LINESIZE];
+    fgets(input, BUFSIZ, depot->streamFrom);
+    // keep reading until gameover or EOF from hub
+    while (!feof(depot->streamFrom)) {
+        // decide what to do on message
+        // int processed = process_input(input, game);
+        // if (processed != 0) {
+            // return processed;
+        // }
+        printf("%s", input);
+        // get next message
+        fgets(input, BUFSIZ, depot->streamFrom);
+    }
+}
+
+int listening(Depot *info) {
+    if (listen(info->server, 10)) {     // allow up to 10 connection requests to queue
+        perror("Listen");
+        // return 4;
+    }
+    
+    int conn_fd;
+    while (conn_fd = accept(info->server, 0, 0), conn_fd >= 0) {    // change 0, 0 to get info about other end
+        // FILE* stream = fdopen(conn_fd, "w");
+        // fputs(msg, stream);
+        // fflush(stream);
+        // fclose(stream);
+
+        // do something with the connection
+
+        // get streams
+        int fd2 = dup(conn_fd);
+        FILE* streamTo = fdopen(conn_fd, "w");
+        FILE* streamFrom = fdopen(fd2, "r");
+
+        // print introduction
+        fprintf(streamTo, "IM:%u:%s\n", info->listeningPort, info->name);
+        fflush(streamTo);
+
+        // spin up listening thread
+        pthread_t tid;
+        DepotThread *val = malloc(sizeof(DepotThread));
+        val->depot = info;
+        val->streamTo = streamTo;
+        val->streamFrom = streamFrom;
+        pthread_create(&tid, 0, thread_listen, (void *)val);
+        pthread_join(tid, NULL);
+        printf("thread close\n");
+    }
+    return 0;
 
 }
 
@@ -153,7 +187,7 @@ int start_up(int argc, char** argv) {
 
     // listen 
     setup_listen(&info);
-    listen(&info);
+    listening(&info);
 
     
     return OK;
