@@ -18,6 +18,7 @@ typedef struct {
     int count;
 } Item;
 
+// struct for connection
 typedef struct {
     char* name;
     char* port;
@@ -46,3 +47,5 @@ typedef struct {
     FILE *streamFrom;
 
 } DepotThread;
+
+void *thread_listen(void *data);

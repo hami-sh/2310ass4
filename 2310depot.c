@@ -117,6 +117,24 @@ void item_add(Depot *info, Item *new) {
 
 }
 
+void item_remove(Depot *info, Item *new) {
+    printf("--withdraw attempt\n");
+    int found = 0;
+
+    for (int i = 0; i < info->totalItems; i++) {
+        if (strcmp(info->items[i].name, new->name) == 0) {
+            found = 1;
+            info->items[i].count -= new->count;
+        }
+    }
+
+    if (found == 0) {
+        new->count = new->count * -1;
+        item_add(info, new);
+    }
+
+}
+
 void depot_connect(Depot *info, char* input) {
     input += 7;
     if (input[0] != ':') {
@@ -152,10 +170,17 @@ void depot_connect(Depot *info, char* input) {
     connection->port = port;
     connection->streamFrom = from;
     connection->streamTo = to;
+    info->connections[info->currentConnected++] = *connection;
 
-    info->connections[info->currentConnected] = *connection;
-    fprintf(to, "IM:%u:%s\n", info->listeningPort, info->name);
-    fflush(to);
+
+    // spin up listening thread
+    printf("thread open\n");
+    pthread_t tid;
+    DepotThread *val = malloc(sizeof(DepotThread));
+    val->depot = info;
+    val->streamTo = to;
+    val->streamFrom = from;
+    pthread_create(&tid, 0, thread_listen, (void *)val);
 }
 
 void depot_im(Depot *info, char* input) {
@@ -211,11 +236,54 @@ void depot_deliver(Depot *info, char* input) {
         printf("%s:%d\n", info->items[i].name, info->items[i].count);
     }
 
-
 }
 
 void depot_withdraw(Depot *info, char* input) {
+    input += 8;
+    if (input[0] != ':') {
+        return;
+    }
+    input++;
+    int numberDigits = 0;
+    int q = 0;
+    while (input[q] != ':') {
+        numberDigits++;
+        q++;
+    }
+    char* quanOrig = malloc(sizeof(char) * numberDigits);
+    strncpy(quanOrig, input, numberDigits);
+    for (int i = 0; i < numberDigits; i++) {
+        if (!isdigit(quanOrig[i])) {
+            return;
+        }
+    }
 
+    int quantity = atoi(quanOrig);
+    input += numberDigits;
+    if (input[0] != ':') {
+        return;
+    }
+    input++;
+
+    char* itemName = malloc(sizeof(char) * strlen(input));
+    strcpy(itemName, input);
+    itemName[strlen(itemName) - 1] = '\0';
+
+    if (quantity <= 0) {
+        return;
+    }
+
+    printf("out: %s %d\n", itemName, quantity);
+    Item *new = malloc(sizeof(Item));
+    new->name = itemName;
+    new->count = quantity;
+
+    item_remove(info, new);
+
+    //todo DEBUG REMOVE
+    for (int i = 0; i < info->totalItems; i++) {
+        printf("%s:%d\n", info->items[i].name, info->items[i].count);
+    }
 }
 
 void depot_transfer(Depot *info, char* input) {
@@ -240,6 +308,7 @@ void process_input(Depot *info, char* input) {
         depot_deliver(info, input);
     } else if (strncmp(input, "Withdraw", 8) == 0) {
         printf("Withdraw\n");
+        depot_withdraw(info, input);
     } else if (strncmp(input, "Transfer", 8) == 0) {
         printf("Transfer\n");
     } else if (strncmp(input, "Defer", 5) == 0) {
@@ -285,6 +354,8 @@ void setup_listen(Depot *info) {
 
 void *thread_listen(void *data) {
     DepotThread *depotThread = (DepotThread*) data;
+    fprintf(depotThread->streamTo, "IM:%u:%s\n", depotThread->depot->listeningPort, depotThread->depot->name);
+    fflush(depotThread->streamTo);
 
     char input[LINESIZE];
     fgets(input, BUFSIZ, depotThread->streamFrom);
@@ -295,6 +366,9 @@ void *thread_listen(void *data) {
         // if (processed != 0) {
             // return processed;
         // }
+        char* dest = malloc(sizeof(char) * (strlen(input) - 1));
+        dest = strncpy(dest, input, strlen(input) - 1);
+        printf("---<%s>---\n", dest);
         process_input(depotThread->depot, input);
 
         // get next message
@@ -304,7 +378,7 @@ void *thread_listen(void *data) {
 
 int listening(Depot *info) {
     if (listen(info->server, 10)) {     // allow up to 10 connection requests to queue
-        perror("Listen");
+        //perror("Listen");
         // return 4;
     }
     
@@ -315,17 +389,10 @@ int listening(Depot *info) {
         // fflush(stream);
         // fclose(stream);
 
-        // do something with the connection
-        printf("--CONNECTION--\n");
-
         // get streams
         int fd2 = dup(conn_fd);
         FILE* streamTo = fdopen(conn_fd, "w");
         FILE* streamFrom = fdopen(fd2, "r");
-
-        // print introduction
-        fprintf(streamTo, "IM:%u:%s\n", info->listeningPort, info->name);
-        fflush(streamTo);
 
         // spin up listening thread
         printf("thread open\n");
@@ -335,8 +402,7 @@ int listening(Depot *info) {
         val->streamTo = streamTo;
         val->streamFrom = streamFrom;
         pthread_create(&tid, 0, thread_listen, (void *)val);
-        pthread_join(tid, NULL);
-        printf("thread close\n");
+        //pthread_join(tid, NULL);
     }
     return 0;
 
