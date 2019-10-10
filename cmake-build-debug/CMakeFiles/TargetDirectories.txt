@@ -1,0 +1,3 @@
+/Users/hamishbultitude/Documents/GitHub/2310ass4/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/Users/hamishbultitude/Documents/GitHub/2310ass4/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/hamishbultitude/Documents/GitHub/2310ass4/cmake-build-debug/CMakeFiles/2310depot.dir

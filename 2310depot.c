@@ -19,22 +19,24 @@ Status show_message(Status s) {
     return s;
 }
 
+//todo remove perror!
+
 int check_int(char* string) {
     for (int i = 0; i < strlen(string); i++) {
         // check integer
         if (string[i] == '.' || string[i] == '-') {
-            return show_message(QUANERR);
+            return -1;
         } 
         // check that dimensions supplied are digits.
         if (!isdigit(string[i])) {
-            return show_message(QUANERR);
+            return -1;
         }
     }
     
     // check greater than 0
     int numb = atoi(string);
     if (numb < 0) {
-        return show_message(QUANERR);
+        return -1;
     }
 
     return OK;
@@ -71,7 +73,7 @@ int parse(int argc, char** argv, Depot *info) {
             // parse item quantity.
             int countStatus = check_int(argv[i]);
             if (countStatus != 0) {
-                return countStatus;
+                return show_message(QUANERR);
             }
             info->items[pos].count = atoi(argv[i]);
             pos++;
@@ -145,6 +147,10 @@ void depot_connect(Depot *info, char* input) {
     char* port = malloc(sizeof(char) * strlen(input) - 1);
     strncpy(port, input, strlen(input) - 1);
 
+    if (check_int(port) != 0) {
+        return;
+    }
+
     // connect to port.
     struct addrinfo* ai = 0;
     struct addrinfo hints;
@@ -166,27 +172,31 @@ void depot_connect(Depot *info, char* input) {
     int fd2=dup(fd);
     FILE* to=fdopen(fd, "w");
     FILE* from=fdopen(fd2, "r");
-    Connection *connection = malloc(sizeof(Connection));
-    connection->port = port;
-    connection->streamFrom = from;
-    connection->streamTo = to;
-    info->connections[info->currentConnected++] = *connection;
+//    Connection *connection = malloc(sizeof(Connection));
+//    connection->port = port;
+//    connection->streamFrom = from;
+//    connection->streamTo = to;
+//    info->attemptedConnections[info->attemptCount++] = *connection;
 
 
     // spin up listening thread
     printf("thread open\n");
     pthread_t tid;
-    DepotThread *val = malloc(sizeof(DepotThread));
+    ThreadData *val = malloc(sizeof(ThreadData));
     val->depot = info;
     val->streamTo = to;
     val->streamFrom = from;
+
+    // record attempted connection
+    record_attempt(info, atoi(port));
+
+    printf("success\n");
     pthread_create(&tid, 0, thread_listen, (void *)val);
 }
 
 void depot_im(Depot *info, char* input) {
-    // send IM back?
-
-    // store connection info
+    // store connection as neighbour
+//    info->neighbours[info->neighbourCount] =
 }
 
 void depot_deliver(Depot *info, char* input) {
@@ -290,12 +300,30 @@ void depot_transfer(Depot *info, char* input) {
 
 }
 
+void debug(Depot *info) {
+    printf("--------(DEBUG)--------\n");
+    printf("%s:%u\n", info->name, info->listeningPort);
+    printf("Goods:\n");
+    for (int i = 0; i < info->totalItems; i++) {
+        printf("%s:%d\n", info->items[i].name, info->items[i].count);
+    }
+    printf("Attempted:\n");
+    for (int i = 0; i < info->attemptCount; i++) {
+        printf("%u\n", info->attemptedConnections[i].addr);
+    }
+    printf("Neighbours:\n");
+    for (int i = 0; i < info->neighbourLength; i++) {
+        printf("%s:%s\n", info->neighbours[i].name, info->neighbours[i].port);
+    }
+    printf("-----------------------\n");
+
+}
+
 void process_input(Depot *info, char* input) {
     char *dest = malloc(sizeof(char) * strlen(input));
-
     if (strncmp(input, "Connect", 7) == 0) {
         // strncpy(dest, input, 4);
-        // dest[4] = 0; 
+        // dest[4] = 0;
         printf("GOT: Connect\n");
         depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
@@ -314,8 +342,15 @@ void process_input(Depot *info, char* input) {
     } else if (strncmp(input, "Defer", 5) == 0) {
         printf("Defer\n");
     } else if (strncmp(input, "Execute", 7) == 0) {
-        printf("Execute\n");
+        printf("Execute \n");
+    } else if (strncmp(input, "debug", 5) == 0) {
+        debug(info); //todo REMOVE
     }
+}
+
+void add_to_list(Connection* list, Connection item, int pos, int length) {
+    //todo realloc & mutex!
+    list[pos] = item;
 }
 
 void setup_listen(Depot *info) {
@@ -340,20 +375,20 @@ void setup_listen(Depot *info) {
     }
     
     // Which port did we get?
-    struct sockaddr_in ad;
-    memset(&ad, 0, sizeof(struct sockaddr_in));
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(struct sockaddr_in));
     socklen_t len=sizeof(struct sockaddr_in);
-    if (getsockname(serv, (struct sockaddr*)&ad, &len)) {
+    if (getsockname(serv, (struct sockaddr*)&addr, &len)) {
         perror("sockname");
         //return 4;
     }
-    printf("%u\n", ntohs(ad.sin_port));
-    info->listeningPort = ntohs(ad.sin_port);
+    printf("%u\n", ntohs(addr.sin_port));
+    info->listeningPort = ntohs(addr.sin_port);
     info->server = serv;
 }
 
 void *thread_listen(void *data) {
-    DepotThread *depotThread = (DepotThread*) data;
+    ThreadData *depotThread = (ThreadData*) data;
     fprintf(depotThread->streamTo, "IM:%u:%s\n", depotThread->depot->listeningPort, depotThread->depot->name);
     fflush(depotThread->streamTo);
 
@@ -376,6 +411,12 @@ void *thread_listen(void *data) {
     }
 }
 
+void record_attempt(Depot *info, int port) {
+    Connection *item = malloc(sizeof(Connection));
+    item->addr = port;
+    add_to_list(info->attemptedConnections, *item, info->attemptCount++, info->attemptLength);
+}
+
 int listening(Depot *info) {
     if (listen(info->server, 10)) {     // allow up to 10 connection requests to queue
         //perror("Listen");
@@ -383,7 +424,9 @@ int listening(Depot *info) {
     }
     
     int conn_fd;
-    while (conn_fd = accept(info->server, 0, 0), conn_fd >= 0) {    // change 0, 0 to get info about other end
+    struct sockaddr_in peer_addr;
+    socklen_t addr_size = sizeof(peer_addr);
+    while (conn_fd = accept(info->server, (struct sockaddr *)&peer_addr, &addr_size), conn_fd >= 0) {    // change 0, 0 to get info about other end
         // FILE* stream = fdopen(conn_fd, "w");
         // fputs(msg, stream);
         // fflush(stream);
@@ -396,11 +439,14 @@ int listening(Depot *info) {
 
         // spin up listening thread
         printf("thread open\n");
-        pthread_t tid;
-        DepotThread *val = malloc(sizeof(DepotThread));
+
+        record_attempt(info, ntohs(peer_addr.sin_port));
+
+        ThreadData *val = malloc(sizeof(ThreadData));
         val->depot = info;
         val->streamTo = streamTo;
         val->streamFrom = streamFrom;
+        pthread_t tid;
         pthread_create(&tid, 0, thread_listen, (void *)val);
         //pthread_join(tid, NULL);
     }
@@ -422,9 +468,13 @@ int start_up(int argc, char** argv) {
         printf("%s:%d\n", info.items[i].name, info.items[i].count);
     }
 
-    info.connections = malloc(3 * sizeof(Connection)); //todo realloc!
-    info.currentConnected = 0;
-    info.connectionNum = 3;
+    info.attemptedConnections = malloc(3 * sizeof(Connection)); //todo realloc!
+    info.attemptCount = 0;
+    info.attemptLength = 3;
+
+    info.neighbours = malloc(3 * sizeof(Connection)); //todo realloc!
+    info.neighbourCount = 0;
+    info.neighbourLength = 3;
 
     // listen 
     setup_listen(&info);

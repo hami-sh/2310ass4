@@ -22,6 +22,7 @@ typedef struct {
 typedef struct {
     char* name;
     char* port;
+    uint addr;
     FILE* streamTo;
     FILE* streamFrom;
 } Connection;
@@ -35,9 +36,13 @@ typedef struct {
     int server;
     uint listeningPort;
 
-    Connection* connections; 
-    int connectionNum;
-    int currentConnected;
+    Connection* attemptedConnections;
+    int attemptLength;
+    int attemptCount;
+
+    Connection* neighbours;
+    int neighbourLength;
+    int neighbourCount;
 } Depot;
 
 // struct for listening thread
@@ -45,7 +50,8 @@ typedef struct {
     Depot *depot;
     FILE *streamTo;
     FILE *streamFrom;
-
-} DepotThread;
+} ThreadData;
 
 void *thread_listen(void *data);
+
+void record_attempt(Depot *info, int port);
