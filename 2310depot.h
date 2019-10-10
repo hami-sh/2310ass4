@@ -25,6 +25,7 @@ typedef struct {
     uint addr;
     FILE* streamTo;
     FILE* streamFrom;
+    int neighbourStatus; // 0 for attempted, 1 for confirmed via IM
 } Connection;
 
 
@@ -35,10 +36,6 @@ typedef struct {
     int totalItems;
     int server;
     uint listeningPort;
-
-    Connection* attemptedConnections;
-    int attemptLength;
-    int attemptCount;
 
     Connection* neighbours;
     int neighbourLength;
@@ -52,6 +49,10 @@ typedef struct {
     FILE *streamFrom;
 } ThreadData;
 
+Status show_message(Status s);
+
 void *thread_listen(void *data);
 
-void record_attempt(Depot *info, int port);
+void record_attempt(Depot *info, int port, FILE *in, FILE *out);
+
+int check_int(char* string);

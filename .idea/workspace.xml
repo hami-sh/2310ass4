@@ -12,15 +12,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f14249e9-39fa-4ef3-a9fa-b475c962ad63" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/deployment.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/webServers.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/2310ass4.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/2310ass4.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.vscode/settings.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.vscode/sftp.json" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/2310depot.c" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/2310depot.h" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/comms.c" beforeDir="false" afterPath="$PROJECT_DIR$/comms.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/comms.h" beforeDir="false" afterPath="$PROJECT_DIR$/comms.h" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -113,7 +109,7 @@
       <workItem from="1570696446579" duration="1931000" />
       <workItem from="1570703169513" duration="41000" />
       <workItem from="1570703223570" duration="20000" />
-      <workItem from="1570703255768" duration="1294000" />
+      <workItem from="1570703255768" duration="5342000" />
     </task>
     <servers />
   </component>
@@ -132,16 +128,5 @@
         </entry>
       </map>
     </option>
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/2310depot.c</url>
-          <line>189</line>
-          <option name="timeStamp" value="3" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>
