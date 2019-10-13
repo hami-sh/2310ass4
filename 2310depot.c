@@ -162,6 +162,7 @@ void *thread_listen(void *data) {
         // get next message
         fgets(input, BUFSIZ, depotThread->streamFrom);
     }
+
     return NULL;
 }
 
