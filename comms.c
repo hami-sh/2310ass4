@@ -3,13 +3,10 @@
 #include "comms.h"
 
 void growArray(Depot *info, Item **items, int currentSize) {
-    printf("--grow\n");
     int totalSize = currentSize + 1;
     Item *temp = (Item*)realloc(*items, (totalSize * sizeof(Item)));
 
     if (temp == NULL) {
-        //todo remove
-        printf("realloc error\n");
         return;
     } else {
         *items = temp;
@@ -19,7 +16,7 @@ void growArray(Depot *info, Item **items, int currentSize) {
 }
 
 void item_add(Depot *info, Item *new) {
-    printf("--add attempt\n");
+//    printf("--add attempt\n");
     int found = 0;
 
     for (int i = 0; i < info->totalItems; i++) {
@@ -31,14 +28,13 @@ void item_add(Depot *info, Item *new) {
 
     if (found == 0) {
         growArray(info, &info->items, info->totalItems);
-        printf("(new size %d)\n", info->totalItems);
         info->items[info->totalItems - 1] = *new;
     }
 
 }
 
 void item_remove(Depot *info, Item *new) {
-    printf("--withdraw attempt\n");
+//    printf("--withdraw attempt\n");
     int found = 0;
 
     for (int i = 0; i < info->totalItems; i++) {
@@ -98,7 +94,7 @@ void depot_connect(Depot *info, char* input) {
     struct addrinfo* ai = 0;
     struct addrinfo hints;
     memset(& hints, 0, sizeof(struct addrinfo));
-    hints.ai_family=AF_INET;        // IPv6  for generic could use AF_UNSPEC
+    hints.ai_family=AF_INET;
     hints.ai_socktype=SOCK_STREAM;
     int err;
     if ((err=getaddrinfo("localhost", port, &hints, &ai))) {
@@ -117,7 +113,7 @@ void depot_connect(Depot *info, char* input) {
     FILE* from=fdopen(fd2, "r");
 
     // spin up listening thread
-    printf("thread open\n");
+//    printf("thread open\n");
     pthread_t tid;
     ThreadData *val = malloc(sizeof(ThreadData));
     pthread_mutex_lock(&info->mutex);
@@ -218,7 +214,9 @@ void depot_im(Depot *info, char* input) {
 }
 
 int depot_deliver(Depot *info, char* input, int key) {
-    printf("%s\n", input);
+    if (key == -1) {
+        input[strlen(input) - 1] = '\0';
+    }
     int checked = check_illegal_char(input, DELIVER);
     if (checked != 0) {
         return 0;
@@ -251,9 +249,6 @@ int depot_deliver(Depot *info, char* input, int key) {
 
     char* itemName = malloc(sizeof(char) * strlen(input));
     strcpy(itemName, input);
-    if (key == -1) {
-        itemName[strlen(itemName) - 1] = '\0'; //prevent cutoff on deferring
-    }
 
     if (quantity <= 0) {
         return show_message(QUANERR);
@@ -290,6 +285,9 @@ int depot_deliver(Depot *info, char* input, int key) {
 }
 
 int depot_withdraw(Depot *info, char* input, int key) {
+    if (key == -1) {
+        input[strlen(input) - 1] = '\0';
+    }
     int checked = check_illegal_char(input, WITHDRAW);
     if (checked != 0) {
         return 0;
@@ -322,9 +320,6 @@ int depot_withdraw(Depot *info, char* input, int key) {
 
     char* itemName = malloc(sizeof(char) * strlen(input));
     strcpy(itemName, input);
-    if (key == -1) {
-        itemName[strlen(itemName) - 1] = '\0'; //prevent cutoff on deferring
-    }
 
     if (quantity <= 0) {
         return show_message(QUANERR);
@@ -358,6 +353,9 @@ int depot_withdraw(Depot *info, char* input, int key) {
 }
 
 int depot_transfer(Depot *info, char* input, int key) {
+    if (key == -1) {
+        input[strlen(input) - 1] = '\0';
+    }
     int checked = check_illegal_char(input, TRANSFER);
     if (checked != 0) {
         return 0;
@@ -405,9 +403,6 @@ int depot_transfer(Depot *info, char* input, int key) {
 
     char* serverName = malloc(sizeof(char) * strlen(input));
     strcpy(serverName, input);
-    if (key == -1) {
-        serverName[strlen(serverName) - 1] = '\0';
-    }
 
     if (quantity <= 0) {
         return show_message(QUANERR);
@@ -546,13 +541,15 @@ void debug(Depot *info) {
         }
     }
 
-    printf("Deferred:\n");
+    printf("Deferred: ");
     printf("2:deliver, 3:widthdraw, 4:transfer\n");
     for (int i = 0; i < info->defCount; i++) {
         if (info->deferred[i].command == TRANSFER) {
-            printf("<%d> %d %s:%d to %s\n", info->deferred[i].key, info->deferred[i].command, info->deferred[i].item->name, info->deferred[i].item->count, info->deferred[i].location);
+            printf("<%d> %d %s:%d to %s\n", info->deferred[i].key, info->deferred[i].command,
+                    info->deferred[i].item->name, info->deferred[i].item->count, info->deferred[i].location);
         } else {
-            printf("<%d> %d %s:%d\n", info->deferred[i].key, info->deferred[i].command, info->deferred[i].item->name, info->deferred[i].item->count);
+            printf("<%d> %d %s:%d\n", info->deferred[i].key, info->deferred[i].command,
+                    info->deferred[i].item->name, info->deferred[i].item->count);
         }
     }
     printf("-----------------------\n");
@@ -563,27 +560,27 @@ void process_input(Depot *info, char* input) {
     if (strncmp(input, "Connect", 7) == 0) {
         // strncpy(dest, input, 4);
         // dest[4] = 0;
-        printf("GOT: Connect\n");
+//        printf("GOT: Connect\n");
         depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
         // strncpy(dest, input, 8);
         // dest[8] = 0;
-        printf("GOT: IM\n");
+//        printf("GOT: IM\n");
         depot_im(info, input);
     } else if (strncmp(input, "Deliver", 7) == 0) {
-        printf("GOT: Deliver \n");
+//        printf("GOT: Deliver \n");
         depot_deliver(info, input, -1);
     } else if (strncmp(input, "Withdraw", 8) == 0) {
-        printf("Withdraw\n");
+//        printf("Withdraw\n");
         depot_withdraw(info, input, -1);
     } else if (strncmp(input, "Transfer", 8) == 0) {
-        printf("Transfer\n");
+//        printf("Transfer\n");
         depot_transfer(info, input, -1);
     } else if (strncmp(input, "Defer", 5) == 0) {
-        printf("Defer\n");
+//        printf("Defer\n");
         defer(info, input);
     } else if (strncmp(input, "Execute", 7) == 0) {
-        printf("Execute \n");
+//        printf("Execute \n");
     } else if (strncmp(input, "debug", 5) == 0) {
         debug(info); //todo REMOVE
     } else if (strncmp(input, "sig", 3) == 0) {

@@ -5,10 +5,16 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 #include "2310depot.h"
 #include "comms.h"
 
 #define LINESIZE 500
+
+#define BOLDGREEN   "\033[1m\033[32m"
+#define RESET   "\033[0m"
+
+
 
 Status show_message(Status s) {
     const char *messages[] = {"",
@@ -150,7 +156,7 @@ void *thread_listen(void *data) {
         // }
         char* dest = malloc(sizeof(char) * (strlen(input) - 1));
         dest = strncpy(dest, input, strlen(input) - 1);
-        printf("---<%s>---\n", dest);
+        printf(BOLDGREEN "---<%s>---\n" RESET, dest);
         process_input(depotThread->depot, input);
 
         // get next message
@@ -184,7 +190,7 @@ int listening(Depot *info) {
 
         record_attempt(info, ntohs(peer_addr.sin_port), streamTo, streamFrom);
         // spin up listening thread
-        printf("thread open\n");
+//        printf("thread open\n");
         ThreadData *val = malloc(sizeof(ThreadData));
         val->depot = info;
         val->streamTo = streamTo;
@@ -250,6 +256,18 @@ void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd) {
     *numElements = tempLength;
 }
 
+void* sigmund(void* info) {
+    Depot *data = (Depot*) info;
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGHUP);
+    int num;
+    while (!sigwait(&set, &num)) {  // block here until a signal arrives
+        sighup_print(data);
+    }
+    return 0;
+}
+
 
 int start_up(int argc, char** argv) {
     Depot info;
@@ -263,11 +281,6 @@ int start_up(int argc, char** argv) {
         return parseStatus;
     }
 
-    //todo DEBUG REMOVE
-    for (int i = 0; i < info.totalItems; i++) {
-        printf("%s:%d\n", info.items[i].name, info.items[i].count);
-    }
-
     info.neighbours = malloc(3 * sizeof(Connection)); //todo realloc!
     info.neighbourCount = 0;
     info.neighbourLength = 3;
@@ -277,6 +290,15 @@ int start_up(int argc, char** argv) {
     info.neighbourLength = 3;
 
     pthread_mutex_init(&info.mutex, NULL);
+
+    pthread_t tid;
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGHUP);
+    pthread_sigmask(SIG_BLOCK, &set, 0);
+    // all new threads inherit the signal mask from
+    // the thread which started them
+    pthread_create(&tid, 0, sigmund, (void *)&info);
 
     // listen 
     setup_listen(&info);
