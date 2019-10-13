@@ -8,6 +8,6 @@ int defer_withdraw(Depot *info, char *input, char *orig, int key);
 
 int defer_transfer(Depot *info, char *input, char *orig, int key);
 
-void add_to_list(Connection* list, Connection item, int pos, int length);
+void add_attempt(Connection **list, Connection *item, int *pos, int *numElements);
 
 void process_input(Depot *info, char* input);

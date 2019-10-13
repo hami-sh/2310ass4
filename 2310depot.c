@@ -150,10 +150,6 @@ void *thread_listen(void *data) {
     // keep reading until gameover or EOF from hub
     while (!feof(depotThread->streamFrom)) {
         // decide what to do on message
-        // int processed = process_input(input, game);
-        // if (processed != 0) {
-            // return processed;
-        // }
         char* dest = malloc(sizeof(char) * (strlen(input) - 1));
         dest = strncpy(dest, input, strlen(input) - 1);
         printf(BOLDGREEN "---<%s>---\n" RESET, dest);
@@ -238,14 +234,20 @@ void setup_listen(Depot *info) {
     info->server = serv;
 }
 
-void allocate_deferred(Depot *info) {
+void allocate_memory(Depot *info) {
     // initialise with 1 space
     info->deferred = (Deferred *) malloc(1 * sizeof(Deferred *));
     info->defLength = 1;
     info->defCount = 0;
+
+    info->neighbours = malloc(1 * sizeof(Connection));
+    info->neighbourCount = 0;
+    info->neighbourLength = 1;
 }
 
+
 void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd) {
+    //todo mutex here
     Deferred *temp;
     int tempLength = *numElements + 1;
 
@@ -273,22 +275,14 @@ void* sigmund(void* info) {
 int start_up(int argc, char** argv) {
     Depot info;
 
-    // allocate space for deferred commands
-    allocate_deferred(&info);
+    // allocate space for deferred & neighbour lists
+    allocate_memory(&info);
 
     // parse args
     int parseStatus = parse(argc, argv, &info);
     if (parseStatus != 0) {
         return parseStatus;
     }
-
-    info.neighbours = malloc(3 * sizeof(Connection)); //todo realloc!
-    info.neighbourCount = 0;
-    info.neighbourLength = 3;
-
-    info.neighbours = malloc(3 * sizeof(Connection)); //todo realloc!
-    info.neighbourCount = 0;
-    info.neighbourLength = 3;
 
     pthread_mutex_init(&info.mutex, NULL);
 

@@ -51,9 +51,16 @@ void item_remove(Depot *info, Item *new) {
 
 }
 
-void add_to_list(Connection* list, Connection item, int pos, int length) {
-    //todo realloc & mutex!
-    list[pos] = item;
+void add_attempt(Connection **list, Connection *item, int *pos, int *numElements) {
+    Connection *temp;
+    int tempLength = *numElements + 1;
+
+    /* increment size of list and store element */
+    temp = realloc(*list, tempLength * sizeof(Deferred));
+    temp[*pos] = *item;
+    *pos += 1;
+    *list = temp;
+    *numElements = tempLength;
 }
 
 void record_attempt(Depot *info, int port, FILE *in, FILE *out) {
@@ -63,7 +70,7 @@ void record_attempt(Depot *info, int port, FILE *in, FILE *out) {
     server->neighbourStatus = 0;
     server->streamTo = in;
     server->streamFrom = out;
-    add_to_list(info->neighbours, *server, info->neighbourCount++, info->neighbourLength);
+    add_attempt(&info->neighbours, server, &info->neighbourCount, &info->neighbourLength);
     pthread_mutex_unlock(&info->mutex);
 }
 
@@ -139,7 +146,7 @@ int check_illegal_char(char* input, Msg msg) {
             return -1;
         }
         if (input[i] == '\n' && ((i != strlen(input) - 1) || i != strlen(input))) {
-            printf("%d %d\n", i, strlen(input));
+            printf("%d %lu\n", i, strlen(input));
             return -1;
         }
     }
