@@ -8,6 +8,9 @@
 #include <signal.h>
 #include "2310depot.h"
 #include "comms.h"
+#include "channel.h"
+#include "queue.h"
+
 
 #define LINESIZE 500
 
@@ -140,6 +143,19 @@ void sighup_print(Depot *data) {
     pthread_mutex_unlock(&data->mutex);
 }
 
+void *thread_worker(void *data) {
+    ThreadData *thread = (ThreadData*) data;
+    while(1) { //todo is this ok?
+        sem_wait(thread->signal);
+        char *input;
+        pthread_mutex_lock(&thread->channelLock);
+        read_channel(thread->channel, (void **) &input);
+        pthread_mutex_unlock(&thread->channelLock);
+        printf("worker read: %s\n", input);
+        process_input(thread->depot, input);
+    }
+}
+
 void *thread_listen(void *data) {
     ThreadData *depotThread = (ThreadData*) data;
     fprintf(depotThread->streamTo, "IM:%u:%s\n", depotThread->depot->listeningPort, depotThread->depot->name);
@@ -153,7 +169,14 @@ void *thread_listen(void *data) {
         char* dest = malloc(sizeof(char) * (strlen(input) - 1));
         dest = strncpy(dest, input, strlen(input) - 1);
         printf(BOLDGREEN "---<%s>---\n" RESET, dest);
-        process_input(depotThread->depot, input);
+
+        bool output = false;
+        while(!output) { // stop once successfully written
+            pthread_mutex_lock(&depotThread->channelLock);
+            output = write_channel(depotThread->channel, input);
+            pthread_mutex_unlock(&depotThread->channelLock);
+        }
+        sem_post(depotThread->signal);
 
         // get next message
         fgets(input, BUFSIZ, depotThread->streamFrom);
@@ -168,10 +191,25 @@ int listening(Depot *info) {
         return 0;
     }
 
+    // create channel & mutex for channel
+    struct Channel channel = new_channel();
+    pthread_mutex_t channelLock;
+    pthread_mutex_init(&channelLock, NULL);
+
+    // create worker thread
+    pthread_t tid_worker;
+    ThreadData *worker = malloc(sizeof(ThreadData));
+    worker->depot = info;
+    worker->channel = &channel;
+    worker->signal = info->signal;
+    worker->channelLock = channelLock;
+    pthread_create(&tid_worker, 0, thread_worker, (void *)worker);
+
+
     int conn_fd;
     struct sockaddr_in peer_addr;
     socklen_t addr_size = sizeof(peer_addr);
-    while (conn_fd = accept(info->server, (struct sockaddr *)&peer_addr, &addr_size), conn_fd >= 0) {    // change 0, 0 to get info about other end
+    while (conn_fd = accept(info->server, (struct sockaddr *)&peer_addr, &addr_size), conn_fd >= 0) {
 
         // get streams
         int fd2 = dup(conn_fd);
@@ -187,11 +225,13 @@ int listening(Depot *info) {
 
         record_attempt(info, ntohs(peer_addr.sin_port), streamTo, streamFrom);
         // spin up listening thread
-//        printf("thread open\n");
         ThreadData *val = malloc(sizeof(ThreadData));
         val->depot = info;
         val->streamTo = streamTo;
         val->streamFrom = streamFrom;
+        val->channel = &channel;
+        val->signal = info->signal;
+        val->channelLock = channelLock;
         pthread_t tid;
         pthread_create(&tid, 0, thread_listen, (void *)val);
         //pthread_join(tid, NULL);
@@ -285,23 +325,23 @@ int start_up(int argc, char** argv) {
     }
 
     pthread_mutex_init(&info.mutex, NULL);
+    sem_t signal;
+    sem_init(&signal, 0, 0);
+    info.signal = &signal;
 
+    // create thread to listen for SIGHUP signal
     pthread_t tid;
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGHUP);
     pthread_sigmask(SIG_BLOCK, &set, 0);
-    // all new threads inherit the signal mask from
-    // the thread which started them
     pthread_create(&tid, 0, sigmund, (void *)&info);
 
-    // listen 
+    // listen
     setup_listen(&info);
     listening(&info);
 
-    
     return OK;
-
 }
 
 int main(int argc, char** argv) {

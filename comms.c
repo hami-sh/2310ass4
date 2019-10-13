@@ -1,6 +1,8 @@
 #include <pthread.h>
 #include "2310depot.h"
 #include "comms.h"
+#include "channel.h"
+
 
 void growArray(Depot *info, Item **items, int currentSize) {
     int totalSize = currentSize + 1;
@@ -565,26 +567,16 @@ void debug(Depot *info) {
 
 void process_input(Depot *info, char* input) {
     if (strncmp(input, "Connect", 7) == 0) {
-        // strncpy(dest, input, 4);
-        // dest[4] = 0;
-//        printf("GOT: Connect\n");
         depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
-        // strncpy(dest, input, 8);
-        // dest[8] = 0;
-//        printf("GOT: IM\n");
         depot_im(info, input);
     } else if (strncmp(input, "Deliver", 7) == 0) {
-//        printf("GOT: Deliver \n");
         depot_deliver(info, input, -1);
     } else if (strncmp(input, "Withdraw", 8) == 0) {
-//        printf("Withdraw\n");
         depot_withdraw(info, input, -1);
     } else if (strncmp(input, "Transfer", 8) == 0) {
-//        printf("Transfer\n");
         depot_transfer(info, input, -1);
     } else if (strncmp(input, "Defer", 5) == 0) {
-//        printf("Defer\n");
         defer(info, input);
     } else if (strncmp(input, "Execute", 7) == 0) {
 //        printf("Execute \n");

@@ -4,6 +4,11 @@
 #include <ctype.h>
 #include <netdb.h>
 #include <unistd.h>
+#include "channel.h"
+#include <semaphore.h>
+
+#ifndef DEPOT_H
+#define DEPOT_H
 
 // enum for exit status
 typedef enum {
@@ -64,6 +69,8 @@ typedef struct {
     int neighbourCount;
 
     pthread_mutex_t mutex;
+    sem_t *signal;
+
 
     Deferred *deferred; // int will point to list of def for that key
     int defLength;
@@ -75,6 +82,10 @@ typedef struct {
     Depot *depot;
     FILE *streamTo;
     FILE *streamFrom;
+    struct Channel *channel;
+    pthread_mutex_t lock;
+    pthread_mutex_t channelLock;
+    sem_t *signal;
 } ThreadData;
 
 Status show_message(Status s);
@@ -88,3 +99,5 @@ int check_int(char* string);
 void sighup_print(Depot *data);
 
 void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd);
+
+#endif

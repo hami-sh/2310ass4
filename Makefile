@@ -11,7 +11,7 @@ TARGETS = 2310depot
 all: $(TARGETS)
 
 2310depot: 2310depot.c
-	$(CC) $(CFLAGS) 2310depot.c -lm -o 2310depot
+	$(CC) $(CFLAGS) 2310depot.c channel.c queue.c comms.c -lm -pthread -o 2310depot
 
 # Clean up our directory - remove objects and binaries
 clean:

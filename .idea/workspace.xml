@@ -14,6 +14,8 @@
     <list default="true" id="f14249e9-39fa-4ef3-a9fa-b475c962ad63" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/2310depot.c" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/2310depot.h" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/Makefile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/comms.c" beforeDir="false" afterPath="$PROJECT_DIR$/comms.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/comms.h" beforeDir="false" afterPath="$PROJECT_DIR$/comms.h" afterDir="false" />
     </list>
@@ -44,6 +46,7 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="OCFindUsagesOptions" text="true" ivars="false" properties="true" derivedClasses="false" />
   <component name="ProjectId" id="1S0DVLfAM1bjNnfLo1UVeF18HXd" />
   <component name="PropertiesComponent">
     <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
@@ -124,7 +127,7 @@
       <workItem from="1570925056585" duration="214000" />
       <workItem from="1570925285186" duration="55000" />
       <workItem from="1570926238951" duration="120000" />
-      <workItem from="1570926372396" duration="9666000" />
+      <workItem from="1570926372396" duration="13526000" />
     </task>
     <servers />
   </component>
