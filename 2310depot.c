@@ -67,6 +67,12 @@ int parse(int argc, char** argv, Depot *info) {
         if (i % 2 == 0) {
             // parse item name
             Item item;
+            for (int j = 0; j < strlen(argv[i]); j++) {
+                if ((argv[i][j] == ' ') || (argv[i][j] == '\n')
+                    || (argv[i][j] == '\r') || (argv[i][j] == ':')) {
+                    return show_message(NAMEERR);
+                }
+            }
             item.name = argv[i];
             info->items[pos] = item;
         } else {
@@ -82,6 +88,50 @@ int parse(int argc, char** argv, Depot *info) {
     info->totalItems = pos;
 
     return OK;
+}
+
+void lexicographic_sort(Item *array, int itemSize, Connection *connections, int connectionSize) {
+    Item storage; //todo bruh
+    // item print
+    for(int i = 0; i < itemSize; ++i) {
+        for(int j = i + 1; j < itemSize; ++j) {
+            if(strcmp(array[i].name, array[j].name) > 0) {
+                storage = array[i];
+                array[i] = array[j];
+                array[j] = storage;
+            }
+        }
+    }
+    for (int i = 0; i < itemSize; ++i) {
+        if (array[i].count != 0) {
+            printf("%s %d\n", array[i].name, array[i].count);
+        }
+    }
+
+    // neighbours
+    printf("Neighbours:\n");
+    Connection temp;
+    for(int i = 0; i < connectionSize; ++i) {
+        for(int j = i + 1; j < connectionSize; ++j) {
+            if(strcmp(connections[i].name, connections[j].name) > 0) {
+                temp = connections[i];
+                connections[i] = connections[j];
+                connections[j] = temp;
+            }
+        }
+    }
+    for (int i = 0; i < connectionSize; ++i) {
+        if (connections[i].neighbourStatus == 1) {
+            printf("%s\n", connections[i].name);
+        }
+    }
+}
+
+void sighup_print(Depot *data) {
+    printf("Goods:\n");
+    pthread_mutex_lock(&data->mutex);
+    lexicographic_sort(data->items, data->totalItems, data->neighbours, data->neighbourCount);
+    pthread_mutex_unlock(&data->mutex);
 }
 
 void *thread_listen(void *data) {
@@ -106,6 +156,7 @@ void *thread_listen(void *data) {
         // get next message
         fgets(input, BUFSIZ, depotThread->streamFrom);
     }
+    return NULL;
 }
 
 int listening(Depot *info) {
@@ -180,8 +231,31 @@ void setup_listen(Depot *info) {
     info->server = serv;
 }
 
+void allocate_deferred(Depot *info) {
+    // initialise with 1 space
+    info->deferred = (Deferred *) malloc(1 * sizeof(Deferred *));
+    info->defLength = 1;
+    info->defCount = 0;
+}
+
+void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd) {
+    Deferred *temp;
+    int tempLength = *numElements + 1;
+
+    /* increment size of list and store element */
+    temp = realloc(*arr, tempLength * sizeof(Deferred));
+    temp[*pos] = *cmd;
+    *pos += 1;
+    *arr = temp;
+    *numElements = tempLength;
+}
+
+
 int start_up(int argc, char** argv) {
     Depot info;
+
+    // allocate space for deferred commands
+    allocate_deferred(&info);
 
     // parse args
     int parseStatus = parse(argc, argv, &info);
@@ -202,6 +276,8 @@ int start_up(int argc, char** argv) {
     info.neighbourCount = 0;
     info.neighbourLength = 3;
 
+    pthread_mutex_init(&info.mutex, NULL);
+
     // listen 
     setup_listen(&info);
     listening(&info);
@@ -211,9 +287,8 @@ int start_up(int argc, char** argv) {
 
 }
 
-
 int main(int argc, char** argv) {
-    if ((argc % 2) != 0 || argc < 2) {
+    if ((argc % 2) != 0 || argc < 2) { // check correct number of args
         show_message(INCORRARGS);
     } else {
         return start_up(argc, argv);
