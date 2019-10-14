@@ -1,10 +1,11 @@
 #include "channel.h"
 #include "queue.h"
+#include <stdlib.h>
 
-struct Channel new_channel(void) {
-    struct Channel output;
+struct Channel* new_channel(void) {
+    struct Channel *output = malloc(sizeof(struct Channel));
 
-    output.inner = new_queue();
+    output->inner = new_queue();
 
     return output;
 }

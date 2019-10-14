@@ -77,27 +77,30 @@ void record_attempt(Depot *info, int port, FILE *in, FILE *out) {
 }
 
 void depot_connect(Depot *info, char* input) {
+    input[strlen(input) - 1] = '\0';
     input += 7;
     if (input[0] != ':') {
         return;
     }
     input++;
 
-    char* port = malloc(sizeof(char) * strlen(input) - 1);
-    strncpy(port, input, strlen(input) - 1);
+    // get port from msg
+//    char* port = malloc(sizeof(char) * strlen(input));
+//    strcpy(port, input);
+    printf("port: %s, %lu\n", input, strlen(input));
 
-    if (check_int(port) != 0) {
+    if (check_int(input) != 0) {
         return;
     }
 
     // prevent same port connection todo mutex?
-    pthread_mutex_lock(&info->mutex);
+//    pthread_mutex_lock(&info->mutex);
     for (int i = 0; i < info->neighbourCount; i++ ) {
-        if (info->neighbours[i].addr == atoi(port)) {
+        if (info->neighbours[i].addr == atoi(input)) {
             return;
         }
     }
-    pthread_mutex_unlock(&info->mutex);
+//    pthread_mutex_unlock(&info->mutex);
 
     // connect to port.
     struct addrinfo* ai = 0;
@@ -106,7 +109,7 @@ void depot_connect(Depot *info, char* input) {
     hints.ai_family=AF_INET;
     hints.ai_socktype=SOCK_STREAM;
     int err;
-    if ((err=getaddrinfo("localhost", port, &hints, &ai))) {
+    if ((err=getaddrinfo("localhost", input, &hints, &ai))) {
         freeaddrinfo(ai);
         return;   // could not work out the address
     }
@@ -125,15 +128,16 @@ void depot_connect(Depot *info, char* input) {
 //    printf("thread open\n");
     pthread_t tid;
     ThreadData *val = malloc(sizeof(ThreadData));
-    pthread_mutex_lock(&info->mutex);
+//    pthread_mutex_lock(&info->mutex);
     val->depot = info;
-    pthread_mutex_unlock(&info->mutex);
+//    pthread_mutex_unlock(&info->mutex);
     val->streamTo = to;
     val->streamFrom = from;
+    val->channel = info->channel;
+    val->signal = info->signal;
 
     // record attempted connection
-    printf("Port: %d\n", atoi(port));
-    record_attempt(info, atoi(port), to, from);
+    record_attempt(info, atoi(input), to, from);
 
     printf("success\n");
     pthread_create(&tid, 0, thread_listen, (void *)val);
@@ -183,6 +187,7 @@ void depot_im(Depot *info, char* input) {
     if (checked != 0) {
         return;
     }
+
     input += 2;
     if (input[0] != ':') {
         return;
@@ -556,10 +561,10 @@ void debug(Depot *info) {
     for (int i = 0; i < info->defCount; i++) {
         if (info->deferred[i].command == TRANSFER) {
             printf("<%d> %d %s:%d to %s\n", info->deferred[i].key, info->deferred[i].command,
-                    info->deferred[i].item->name, info->deferred[i].item->count, info->deferred[i].location);
+                   info->deferred[i].item->name, info->deferred[i].item->count, info->deferred[i].location);
         } else {
             printf("<%d> %d %s:%d\n", info->deferred[i].key, info->deferred[i].command,
-                    info->deferred[i].item->name, info->deferred[i].item->count);
+                   info->deferred[i].item->name, info->deferred[i].item->count);
         }
     }
     printf("-----------------------\n");

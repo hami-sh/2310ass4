@@ -21,9 +21,9 @@
 
 Status show_message(Status s) {
     const char *messages[] = {"",
-            "Usage: 2310depot name {goods qty}\n",
-            "Invalid name(s)\n",
-            "Invalid quantity\n"};
+                              "Usage: 2310depot name {goods qty}\n",
+                              "Invalid name(s)\n",
+                              "Invalid quantity\n"};
     fputs(messages[s], stderr);
     return s;
 }
@@ -31,17 +31,18 @@ Status show_message(Status s) {
 //todo remove perror!
 
 int check_int(char* string) {
+    printf("str: %s\n", string);
     for (int i = 0; i < strlen(string); i++) {
         // check integer
         if (string[i] == '.' || string[i] == '-') {
             return -1;
-        } 
+        }
         // check that dimensions supplied are digits.
         if (!isdigit(string[i])) {
             return -1;
         }
     }
-    
+
     // check greater than 0
     int numb = atoi(string);
     if (numb < 0) {
@@ -60,12 +61,12 @@ int parse(int argc, char** argv, Depot *info) {
 
     // illegal chars
     for (int i = 0; i < strlen(argv[1]); i++) {
-        if ((argv[1][i] == ' ') || (argv[1][i] == '\n') || (argv[1][i] == '\r') 
+        if ((argv[1][i] == ' ') || (argv[1][i] == '\n') || (argv[1][i] == '\r')
             || (argv[1][i] == ':')) {
             return show_message(NAMEERR);
         }
     }
-    
+
     // set name
     info->name = argv[1];
 
@@ -148,15 +149,15 @@ void *thread_worker(void *data) {
     while(1) { //todo is this ok?
         sem_wait(thread->signal);
         char *input;
-        pthread_mutex_lock(&thread->channelLock);
+//        pthread_mutex_lock(&thread->channelLock);
         read_channel(thread->channel, (void **) &input);
-        pthread_mutex_unlock(&thread->channelLock);
+//        pthread_mutex_unlock(&thread->channelLock);
         printf("worker read: %s\n", input);
         process_input(thread->depot, input);
     }
 }
 
-void *thread_listen(void *data) {
+  void *thread_listen(void *data) {
     ThreadData *depotThread = (ThreadData*) data;
     fprintf(depotThread->streamTo, "IM:%u:%s\n", depotThread->depot->listeningPort, depotThread->depot->name);
     fflush(depotThread->streamTo);
@@ -166,23 +167,18 @@ void *thread_listen(void *data) {
     // keep reading until gameover or EOF from hub
     while (!feof(depotThread->streamFrom)) {
         // decide what to do on message
-        char* dest = malloc(sizeof(char) * (strlen(input) - 1));
-        dest = strncpy(dest, input, strlen(input) - 1);
+        char* dest = malloc(sizeof(char) * (strlen(input)));
+        dest = strncpy(dest, input, strlen(input));
+        dest[strlen(input) - 1] = '\0';
         printf(BOLDGREEN "---<%s>---\n" RESET, dest);
-
         bool output = false;
-        printf("1\n");
+        
         while(!output) { // stop once successfully written
             pthread_mutex_lock(&depotThread->channelLock);
-            printf("2\n");
             output = write_channel(depotThread->channel, input);
-            printf("3\n");
             pthread_mutex_unlock(&depotThread->channelLock);
         }
-        printf("3.5\n");
         sem_post(depotThread->signal);
-        printf("4\n");
-
         // get next message
         fgets(input, BUFSIZ, depotThread->streamFrom);
     }
@@ -197,15 +193,16 @@ int listening(Depot *info) {
     }
 
     // create channel & mutex for channel
-    struct Channel channel = new_channel();
+    struct Channel *channel = new_channel();
     pthread_mutex_t channelLock;
     pthread_mutex_init(&channelLock, NULL);
 
     // create worker thread
     pthread_t tid_worker;
     ThreadData *worker = malloc(sizeof(ThreadData));
+    info->channel = channel;
     worker->depot = info;
-    worker->channel = &channel;
+    worker->channel = channel;
     worker->signal = info->signal;
     worker->channelLock = channelLock;
     pthread_create(&tid_worker, 0, thread_worker, (void *)worker);
@@ -234,7 +231,7 @@ int listening(Depot *info) {
         val->depot = info;
         val->streamTo = streamTo;
         val->streamFrom = streamFrom;
-        val->channel = &channel;
+        val->channel = channel;
         val->signal = info->signal;
         val->channelLock = channelLock;
         pthread_t tid;
@@ -311,7 +308,6 @@ void* sigmund(void* info) {
     sigaddset(&set, SIGHUP);
     int num;
     while (!sigwait(&set, &num)) {  // block here until a signal arrives
-        // write to channel
         sighup_print(data);
     }
     return 0;
@@ -330,7 +326,10 @@ int start_up(int argc, char** argv) {
         return parseStatus;
     }
 
-    pthread_mutex_init(&info.mutex, NULL);
+    pthread_mutex_t mutex;
+    pthread_mutex_init(&mutex, NULL);
+    info.mutex = mutex;
+
     sem_t signal;
     sem_init(&signal, 0, 0);
     info.signal = &signal;

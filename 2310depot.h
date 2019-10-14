@@ -71,6 +71,8 @@ typedef struct {
     pthread_mutex_t mutex;
     sem_t *signal;
 
+    struct Channel *channel;
+
 
     Deferred *deferred; // int will point to list of def for that key
     int defLength;

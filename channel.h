@@ -15,7 +15,7 @@ struct Channel {
 /*
  * Creates (and returns) a new, empty channel, with no data in it.
  */
-struct Channel new_channel(void);
+struct Channel* new_channel(void);
 
 /*
  * Destroys an old channel. Takes as arguments a pointer to the channel, as
