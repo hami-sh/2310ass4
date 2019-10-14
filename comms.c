@@ -567,7 +567,7 @@ void debug(Depot *info) {
 
 void process_input(Depot *info, char* input) {
     if (strncmp(input, "Connect", 7) == 0) {
-        depot_connect(info, input);
+        depot_(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
         depot_im(info, input);
     } else if (strncmp(input, "Deliver", 7) == 0) {

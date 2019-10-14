@@ -306,6 +306,7 @@ void* sigmund(void* info) {
     sigaddset(&set, SIGHUP);
     int num;
     while (!sigwait(&set, &num)) {  // block here until a signal arrives
+        // write to channel
         sighup_print(data);
     }
     return 0;
