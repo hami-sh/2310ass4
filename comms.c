@@ -3,11 +3,18 @@
 #include "comms.h"
 #include "channel.h"
 
-
-void growArray(Depot *info, Item **items, int currentSize) {
+/**
+ * increase the size of the item array
+ * @param info - Depot struct holding related data.
+ * @param items - pointer to array of items
+ * @param currentSize - size of the array of items
+ */
+void grow_item_array(Depot *info, Item **items, int currentSize) {
+    // increase item size and realloc
     int totalSize = currentSize + 1;
-    Item *temp = (Item*)realloc(*items, (totalSize * sizeof(Item)));
+    Item *temp = (Item *) realloc(*items, (totalSize * sizeof(Item)));
 
+    // set item array
     if (temp == NULL) {
         return;
     } else {
@@ -17,73 +24,110 @@ void growArray(Depot *info, Item **items, int currentSize) {
     info->totalItems = totalSize;
 }
 
+/**
+ * Add item to the array of stored depot items
+ * @param info - Depot struct holding related data.
+ * @param new - Item struct to store.
+ */
 void item_add(Depot *info, Item *new) {
-//    printf("--add attempt\n");
+    // determine if item present in the array
     int found = 0;
-
     for (int i = 0; i < info->totalItems; i++) {
         if (strcmp(info->items[i].name, new->name) == 0) {
             found = 1;
+            // if present, increase count
             info->items[i].count += new->count;
         }
     }
 
+    // if not found, add a new entry
     if (found == 0) {
-        growArray(info, &info->items, info->totalItems);
+        grow_item_array(info, &info->items, info->totalItems);
         info->items[info->totalItems - 1] = *new;
     }
 
 }
 
-void item_remove(Depot *info, Item *new) {
-//    printf("--withdraw attempt\n");
+/**
+ * Function to remove item from array of stored items
+ * @param info - Depot struct holding related data.
+ * @param remove - Item struct to remove
+ */
+void item_remove(Depot *info, Item *remove) {
+    // determine if item present in the array
     int found = 0;
-
     for (int i = 0; i < info->totalItems; i++) {
-        if (strcmp(info->items[i].name, new->name) == 0) {
+        if (strcmp(info->items[i].name, remove->name) == 0) {
             found = 1;
-            info->items[i].count -= new->count;
+            // if found, decrease the amout
+            info->items[i].count -= remove->count;
         }
     }
 
+    // if not found, set count to negative and add to list
     if (found == 0) {
-        new->count = new->count * -1;
-        item_add(info, new);
+        remove->count = remove->count * -1;
+        item_add(info, remove);
     }
-
 }
 
-void add_attempt(Connection **list, Connection *item, int *pos, int *numElements) {
+/**
+ * Function to add neighbour to list of connections
+ * @param list - pointer to list of connections
+ * @param connection - connection struct to add to list
+ * @param pos - pointer to integer for position to add connection
+ * @param numElements - pointer to integer for length of connection array
+ */
+void add_attempt(Connection **list, Connection *connection, int *pos,
+                 int *numElements) {
     /* increment size of list and store element */
     const int tempLength = *numElements * 2;
-    printf("before : %d\n", tempLength);
-    Connection *temp = (Connection *)realloc(*list, tempLength * sizeof(Deferred));
-    printf("after : %d\n", tempLength);
-    temp[*pos] = *item;
+    Connection *temp = (Connection *) realloc(*list,
+            tempLength * sizeof(Deferred));
+    temp[*pos] = *connection;
     *pos += 1;
     *list = temp;
     *numElements = tempLength;
-    printf("set : %d\n", *numElements);
 }
 
-void record_attempt(Depot *info, char* name, int port, FILE *in, FILE *out, int status) {
+/**
+ * Function to handle the recording of connections
+ * @param info - Depot struct holding related data.
+ * @param name - string representing name of server
+ * @param port - integer representing port
+ * @param in - file stream to the connection
+ * @param out - file stream from the connection
+ * @param status - integer (1 if confirmed via IM, 0 if not)
+ */
+void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
+        int status) {
+    // create struct and store values. Lock and unlock as required with mutex.
     Connection *server = malloc(sizeof(Connection));
-    pthread_mutex_lock(&info->mutex);
+    pthread_mutex_lock(&info->dataLock);
     server->name = name;
     server->addr = port;
     server->neighbourStatus = status;
     server->streamTo = in;
     server->streamFrom = out;
+
+    // store neighbour, reallocate if required
     if (info->neighbourCount < info->neighbourLength - 1) {
         info->neighbours[info->neighbourCount] = *server;
         info->neighbourCount++;
     } else {
-        add_attempt(&info->neighbours, server, &info->neighbourCount, &info->neighbourLength);
+        add_attempt(&info->neighbours, server, &info->neighbourCount,
+                &info->neighbourLength);
     }
-    pthread_mutex_unlock(&info->mutex);
+    pthread_mutex_unlock(&info->dataLock);
 }
 
-void depot_connect(Depot *info, char* input) {
+/**
+ * Function to handle the connection of the depot to other depots
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ */
+void depot_connect(Depot *info, char *input) {
+    // ensure sting format is ok
     input[strlen(input) - 1] = '\0';
     input += 7;
     if (input[0] != ':') {
@@ -94,63 +138,68 @@ void depot_connect(Depot *info, char* input) {
     // get port from msg
 //    char* port = malloc(sizeof(char) * strlen(input));
 //    strcpy(port, input);
-    printf("port: %s, %lu\n", input, strlen(input));
+//    printf("port: %s, %lu\n", input, strlen(input));
 
+    // check format of integer
     if (check_int(input) != 0) {
         return;
     }
 
-    // prevent same port connection todo mutex?
-//    pthread_mutex_lock(&info->mutex);
-    for (int i = 0; i < info->neighbourCount; i++ ) {
+    // prevent same port connection
+    pthread_mutex_lock(&info->dataLock);
+    for (int i = 0; i < info->neighbourCount; i++) {
         if (info->neighbours[i].addr == atoi(input)) {
             return;
         }
     }
-//    pthread_mutex_unlock(&info->mutex);
+    pthread_mutex_unlock(&info->dataLock);
 
     // connect to port.
-    struct addrinfo* ai = 0;
-    struct addrinfo hints;
-    memset(& hints, 0, sizeof(struct addrinfo));
-    hints.ai_family=AF_INET;
-    hints.ai_socktype=SOCK_STREAM;
-    int err;
-    if ((err=getaddrinfo("localhost", input, &hints, &ai))) {
-        freeaddrinfo(ai);
+    struct addrinfo *addressInfo = 0;
+    struct addrinfo settings;
+    memset(&settings, 0, sizeof(struct addrinfo));
+    settings.ai_family = AF_INET; // IPv4 connection
+    settings.ai_socktype = SOCK_STREAM; // connect peer to peer
+
+    // attempt to parse address info
+    if (getaddrinfo("localhost", input, &settings, &addressInfo)) {
+        freeaddrinfo(addressInfo);
         return;   // could not work out the address
     }
-    int fd=socket(AF_INET, SOCK_STREAM, 0); // 0 == use default protocol
-    if (connect(fd, (struct sockaddr*)ai->ai_addr, sizeof(struct sockaddr))) {
+
+    // create socket and connect to the port
+    // use default protocol
+    int fileDescriptor = socket(AF_INET, SOCK_STREAM, 0);
+    if (connect(fileDescriptor, (struct sockaddr *) addressInfo->ai_addr,
+                sizeof(struct sockaddr))) {
         return;
     }
-    // fd is now connected
-    // we want separate streams (which we can close independently)
 
-    int fd2=dup(fd);
-    FILE* to=fdopen(fd, "w");
-    FILE* from=fdopen(fd2, "r");
+    // create file streams for communication to/from connection
+    int dupFd = dup(fileDescriptor);
+    FILE *to = fdopen(fileDescriptor, "w");
+    FILE *from = fdopen(dupFd, "r");
 
     // spin up listening thread
-//    printf("thread open\n");
     pthread_t tid;
     ThreadData *val = malloc(sizeof(ThreadData));
-//    pthread_mutex_lock(&info->mutex);
     val->depot = info;
-//    pthread_mutex_unlock(&info->mutex);
     val->streamTo = to;
     val->streamFrom = from;
     val->channel = info->channel;
     val->signal = info->signal;
 
-    // record attempted connection
-//    record_attempt(info, atoi(input), to, from, 0);
-
-    printf("success\n");
-    pthread_create(&tid, 0, thread_listen, (void *)val);
+    pthread_create(&tid, 0, thread_listen, (void *) val);
 }
 
-int check_illegal_char(char* input, Command msg) {
+/**
+ * Function to check if illegal character / bad formatting in command
+ * @param input - string of command to perform.
+ * @param msg - ENUM representing type of command sent
+ * @return 0 - formatting is error free
+ *         -1 - bad formatting
+ */
+int check_illegal_char(char *input, Command msg) {
     int counter = 0;
     for (int i = 0; i < strlen(input); i++) {
         if (input[i] == ':') {
@@ -159,7 +208,8 @@ int check_illegal_char(char* input, Command msg) {
         if (input[i] == '\r' || input[i] == ' ') {
             return -1;
         }
-        if (input[i] == '\n' && ((i != strlen(input) - 1) || i != strlen(input))) {
+        if (input[i] == '\n' && ((i != strlen(input) - 1)
+            || i != strlen(input))) {
             printf("%d %lu\n", i, strlen(input));
             return -1;
         }
@@ -188,7 +238,7 @@ int check_illegal_char(char* input, Command msg) {
     return 0;
 }
 
-void depot_im(Depot *info, char* input, FILE* in, FILE* out) {
+void depot_im(Depot *info, char *input, FILE *in, FILE *out) {
     input[strlen(input) - 1] = '\0';
     int checked = check_illegal_char(input, IM);
     if (checked != 0) {
@@ -207,7 +257,7 @@ void depot_im(Depot *info, char* input, FILE* in, FILE* out) {
         numberDigits++;
         q++;
     }
-    char* portOrig = malloc(sizeof(char) * numberDigits);
+    char *portOrig = malloc(sizeof(char) * numberDigits);
     strncpy(portOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(portOrig[i])) {
@@ -222,7 +272,7 @@ void depot_im(Depot *info, char* input, FILE* in, FILE* out) {
     }
     input++;
 
-    char* serverName = malloc(sizeof(char) * strlen(input));
+    char *serverName = malloc(sizeof(char) * strlen(input));
     strcpy(serverName, input);
 //    serverName[strlen(serverName) - 1] = '\0';
 
@@ -236,7 +286,7 @@ void depot_im(Depot *info, char* input, FILE* in, FILE* out) {
     record_attempt(info, serverName, port, in, out, 1);
 }
 
-int depot_deliver(Depot *info, char* input, int key) {
+int depot_deliver(Depot *info, char *input, int key) {
     if (key == -1) {
         input[strlen(input) - 1] = '\0';
     }
@@ -255,7 +305,7 @@ int depot_deliver(Depot *info, char* input, int key) {
         numberDigits++;
         q++;
     }
-    char* quanOrig = malloc(sizeof(char) * numberDigits);
+    char *quanOrig = malloc(sizeof(char) * numberDigits);
     strncpy(quanOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(quanOrig[i])) {
@@ -270,7 +320,7 @@ int depot_deliver(Depot *info, char* input, int key) {
     }
     input++;
 
-    char* itemName = malloc(sizeof(char) * strlen(input));
+    char *itemName = malloc(sizeof(char) * strlen(input));
     strcpy(itemName, input);
 
     if (quantity <= 0) {
@@ -307,7 +357,7 @@ int depot_deliver(Depot *info, char* input, int key) {
 
 }
 
-int depot_withdraw(Depot *info, char* input, int key) {
+int depot_withdraw(Depot *info, char *input, int key) {
     if (key == -1) {
         input[strlen(input) - 1] = '\0';
     }
@@ -326,7 +376,7 @@ int depot_withdraw(Depot *info, char* input, int key) {
         numberDigits++;
         q++;
     }
-    char* quanOrig = malloc(sizeof(char) * numberDigits);
+    char *quanOrig = malloc(sizeof(char) * numberDigits);
     strncpy(quanOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(quanOrig[i])) {
@@ -341,7 +391,7 @@ int depot_withdraw(Depot *info, char* input, int key) {
     }
     input++;
 
-    char* itemName = malloc(sizeof(char) * strlen(input));
+    char *itemName = malloc(sizeof(char) * strlen(input));
     strcpy(itemName, input);
 
     if (quantity <= 0) {
@@ -375,7 +425,7 @@ int depot_withdraw(Depot *info, char* input, int key) {
     return 0;
 }
 
-int depot_transfer(Depot *info, char* input, int key) {
+int depot_transfer(Depot *info, char *input, int key) {
     if (key == -1) {
         input[strlen(input) - 1] = '\0';
     }
@@ -394,7 +444,7 @@ int depot_transfer(Depot *info, char* input, int key) {
         numberDigits++;
         q++;
     }
-    char* quanOrig = malloc(sizeof(char) * numberDigits);
+    char *quanOrig = malloc(sizeof(char) * numberDigits);
     strncpy(quanOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(quanOrig[i])) {
@@ -415,7 +465,7 @@ int depot_transfer(Depot *info, char* input, int key) {
         itemLength++;
         j++;
     }
-    char* itemName = malloc(sizeof(char) * itemLength);
+    char *itemName = malloc(sizeof(char) * itemLength);
     strncpy(itemName, input, itemLength);
     input += itemLength;
 
@@ -424,7 +474,7 @@ int depot_transfer(Depot *info, char* input, int key) {
     }
     input++;
 
-    char* serverName = malloc(sizeof(char) * strlen(input));
+    char *serverName = malloc(sizeof(char) * strlen(input));
     strcpy(serverName, input);
 
     if (quantity <= 0) {
@@ -488,7 +538,7 @@ int defer(Depot *info, char *input) {
     while (input[numberDigits] != ':') {
         numberDigits++;
     }
-    char* keyOrig = malloc(sizeof(char) * numberDigits);
+    char *keyOrig = malloc(sizeof(char) * numberDigits);
     strncpy(keyOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(keyOrig[i])) {
@@ -508,7 +558,7 @@ int defer(Depot *info, char *input) {
     while (input[numberLetters] != ':') {
         numberLetters++;
     }
-    char* order = malloc(sizeof(char) * numberLetters);
+    char *order = malloc(sizeof(char) * numberLetters);
     strncpy(order, input, numberLetters);
 
     // store details at key
@@ -560,7 +610,8 @@ void debug(Depot *info) {
         if (info->neighbours[i].neighbourStatus == 0) {
             printf("%u\n", info->neighbours[i].addr);
         } else {
-            printf("%u <%s>\n", info->neighbours[i].addr, info->neighbours[i].name);
+            printf("%u <%s>\n", info->neighbours[i].addr,
+                    info->neighbours[i].name);
         }
     }
 
@@ -568,18 +619,22 @@ void debug(Depot *info) {
     printf("2:deliver, 3:widthdraw, 4:transfer\n");
     for (int i = 0; i < info->defCount; i++) {
         if (info->deferred[i].command == TRANSFER) {
-            printf("<%d> %d %s:%d to %s\n", info->deferred[i].key, info->deferred[i].command,
-                   info->deferred[i].item->name, info->deferred[i].item->count, info->deferred[i].location);
+            printf("<%d> %d %s:%d to %s\n", info->deferred[i].key,
+                    info->deferred[i].command,
+                   info->deferred[i].item->name, info->deferred[i].item->count,
+                   info->deferred[i].location);
         } else {
-            printf("<%d> %d %s:%d\n", info->deferred[i].key, info->deferred[i].command,
-                   info->deferred[i].item->name, info->deferred[i].item->count);
+            printf("<%d> %d %s:%d\n", info->deferred[i].key,
+                    info->deferred[i].command,
+                   info->deferred[i].item->name,
+                   info->deferred[i].item->count);
         }
     }
     printf("-----------------------\n");
 
 }
 
-void process_input(Depot *info, char* input, FILE* in, FILE* out) {
+void process_input(Depot *info, char *input, FILE *in, FILE *out) {
     if (strncmp(input, "Connect", 7) == 0) {
         depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {

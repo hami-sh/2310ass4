@@ -11,14 +11,15 @@
 #include "channel.h"
 #include "queue.h"
 
-
 #define LINESIZE 500
+#define BOLDGREEN "\033[1m\033[32m"
+#define RESET "\033[0m"
 
-#define BOLDGREEN   "\033[1m\033[32m"
-#define RESET   "\033[0m"
-
-
-
+/**
+ * Function to output an error message and return status.
+ * @param s status to return with.
+ * @return error status.
+ */
 Status show_message(Status s) {
     const char *messages[] = {"",
                               "Usage: 2310depot name {goods qty}\n",
@@ -30,10 +31,17 @@ Status show_message(Status s) {
 
 //todo remove perror!
 
-int check_int(char* string) {
+/**
+ * Function to check integer for parsing arguments
+ * @param string - string to check for integer
+ * @return 0 - string was an integer
+ *         -1 - string was not an integer / less than 0
+ */
+int check_int(char *string) {
     if (strlen(string) == 0) {
         return -1;
     }
+    // loop over characters of the string
     for (int i = 0; i < strlen(string); i++) {
         // check integer
         if (string[i] == '.' || string[i] == '-') {
@@ -45,7 +53,7 @@ int check_int(char* string) {
         }
     }
 
-    // check greater than 0
+    // check greater than 0 (for parsing quantity value)
     int numb = atoi(string);
     if (numb < 0) {
         return -1;
@@ -54,30 +62,38 @@ int check_int(char* string) {
     return OK;
 }
 
-int parse(int argc, char** argv, Depot *info) {
-    /* 2310depot garden sand 10 seeds 2 */
-    // empty name
+/**
+ * Function to handle the parsing of command line arguments
+ * @param argc - number of arguments supplied
+ * @param argv - arguments supplied at command line.
+ * @param info - depot struct to hold info
+ * @return 0 - parsed successfully
+ *         1 - Empty name or name contains banned characters
+ *         2 - Quantity parameter is < 0 or is not a number
+ */
+int parse(int argc, char **argv, Depot *info) {
+    // check not empty name
     if (strlen(argv[1]) == 0) {
         return show_message(NAMEERR);
     }
 
-    // illegal chars
+    // check if there are illegal chars
     for (int i = 0; i < strlen(argv[1]); i++) {
         if ((argv[1][i] == ' ') || (argv[1][i] == '\n') || (argv[1][i] == '\r')
             || (argv[1][i] == ':')) {
             return show_message(NAMEERR);
         }
     }
-
-    // set name
     info->name = argv[1];
 
-    // parse items
+    /* parse items */
+    // malloc based on number of items from the commandline
     info->items = malloc(sizeof(Item) * ((argc - 2) / 2));
     int pos = 0;
+    // loop over items (skipping program name and depot name)
     for (int i = 2; i < argc; i++) {
         if (i % 2 == 0) {
-            // parse item name
+            // parse item name & check illegal characters
             Item item;
             for (int j = 0; j < strlen(argv[i]); j++) {
                 if ((argv[i][j] == ' ') || (argv[i][j] == '\n')
@@ -85,6 +101,7 @@ int parse(int argc, char** argv, Depot *info) {
                     return show_message(NAMEERR);
                 }
             }
+            // store item
             item.name = argv[i];
             info->items[pos] = item;
         } else {
@@ -93,6 +110,7 @@ int parse(int argc, char** argv, Depot *info) {
             if (countStatus != 0) {
                 return show_message(QUANERR);
             }
+            // store item quantity
             info->items[pos].count = atoi(argv[i]);
             pos++;
         }
@@ -102,38 +120,50 @@ int parse(int argc, char** argv, Depot *info) {
     return OK;
 }
 
-void lexicographic_sort(Item *array, int itemSize, Connection *connections, int connectionSize) {
-    Item storage; //todo bruh
-    // item print
-    for(int i = 0; i < itemSize; ++i) {
-        for(int j = i + 1; j < itemSize; ++j) {
-            if(strcmp(array[i].name, array[j].name) > 0) {
-                storage = array[i];
-                array[i] = array[j];
-                array[j] = storage;
+/**
+ * Function to print goods and neighbours lexicographically
+ * @param items - array of items to print
+ * @param itemSize - size of the item array
+ * @param connections - array of connections to the depot
+ * @param connectionSize - size of the connection array.
+ */
+void lexicographic_print(Item *items, int itemSize, Connection *connections,
+        int connectionSize) {
+    /* print items */
+    Item storage;
+    for (int i = 0; i < itemSize; ++i) {
+        for (int j = i + 1; j < itemSize; ++j) {
+            if (strcmp(items[i].name, items[j].name) > 0) {
+                // swap if not lexicographically ordered
+                storage = items[i];
+                items[i] = items[j];
+                items[j] = storage;
             }
         }
     }
+    // print the items after sorting
     for (int i = 0; i < itemSize; ++i) {
-        if (array[i].count != 0) {
-            printf("%s %d\n", array[i].name, array[i].count);
+        if (items[i].count != 0) {
+            printf("%s %d\n", items[i].name, items[i].count);
             fflush(stdout);
         }
     }
 
-    // neighbours
+    /* print neighbours */
     printf("Neighbours:\n");
     fflush(stdout);
     Connection temp;
-    for(int i = 0; i < connectionSize; ++i) {
-        for(int j = i + 1; j < connectionSize; ++j) {
-            if(strcmp(connections[i].name, connections[j].name) > 0) {
+    for (int i = 0; i < connectionSize; ++i) {
+        for (int j = i + 1; j < connectionSize; ++j) {
+            if (strcmp(connections[i].name, connections[j].name) > 0) {
+                // swap if not lexicographically ordered
                 temp = connections[i];
                 connections[i] = connections[j];
                 connections[j] = temp;
             }
         }
     }
+    // print neighbours after sorting
     for (int i = 0; i < connectionSize; ++i) {
         if (connections[i].neighbourStatus == 1) {
             printf("%s\n", connections[i].name);
@@ -142,167 +172,204 @@ void lexicographic_sort(Item *array, int itemSize, Connection *connections, int 
     }
 }
 
+/**
+ * Function to handle printing of goods and neighbours when receiving SIGHUP
+ * @param data - struct representing depot data.
+ */
 void sighup_print(Depot *data) {
     printf("Goods:\n");
     fflush(stdout);
-    pthread_mutex_lock(&data->mutex);
-    lexicographic_sort(data->items, data->totalItems, data->neighbours, data->neighbourCount);
-    pthread_mutex_unlock(&data->mutex);
+    // lock and unlock via mutex
+    pthread_mutex_lock(&data->dataLock);
+    lexicographic_print(data->items, data->totalItems, data->neighbours,
+            data->neighbourCount);
+    pthread_mutex_unlock(&data->dataLock);
 }
 
+/**
+ * Function for thread to read messages from channel and act upon them
+ * @param data - void pointer (parsed to ThreadData struct)
+ * @return void pointer
+ */
 void *thread_worker(void *data) {
-    ThreadData *thread = (ThreadData*) data;
-    while(1) {
+    // parse ThreadData struct from void*
+    ThreadData *thread = (ThreadData *) data;
+    while (1) {
+        // wait for message
         sem_wait(thread->signal);
         Message *message;
+        // read message from the channel
         pthread_mutex_lock(&thread->channelLock);
         read_channel(thread->channel, (void **) &message);
         pthread_mutex_unlock(&thread->channelLock);
-//        printf("worker read: %s\n", message->input);
-        process_input(thread->depot, message->input, message->streamTo, message->streamFrom);
+
+        // perform function of the message
+        if (message->sighup == 1) {
+            sighup_print(thread->depot);
+        } else {
+            process_input(thread->depot, message->input, message->streamTo,
+                    message->streamFrom);
+        }
     }
 }
 
-  void *thread_listen(void *data) {
-    ThreadData *depotThread = (ThreadData*) data;
-    fprintf(depotThread->streamTo, "IM:%u:%s\n", depotThread->depot->listeningPort, depotThread->depot->name);
+/**
+ * Function for thread to listen to connected file streams
+ * @param data - void pointer (parsed to ThreadData struct)
+ * @return void pointer
+ */
+void *thread_listen(void *data) {
+    // parse ThreadData from void pointer
+    ThreadData *depotThread = (ThreadData *) data;
+    // send IM message to connected depot
+    fprintf(depotThread->streamTo, "IM:%u:%s\n",
+            depotThread->depot->listeningPort, depotThread->depot->name);
     fflush(depotThread->streamTo);
 
+    /* read messages from the file stream */
     char input[LINESIZE];
     fgets(input, BUFSIZ, depotThread->streamFrom);
-    // keep reading until gameover or EOF from hub
+    // continue until EOF from depot (disconnects)
     while (!feof(depotThread->streamFrom)) {
-        // decide what to do on message todo remove below
-        char* dest = malloc(sizeof(char) * (strlen(input)));
-        dest = strncpy(dest, input, strlen(input));
-        dest[strlen(input) - 1] = '\0';
+//        char* dest = malloc(sizeof(char) * (strlen(input)));
+//        dest = strncpy(dest, input, strlen(input));
+//        dest[strlen(input) - 1] = '\0';
 //        printf(BOLDGREEN "---<%s>---\n" RESET, dest);
 
-        // create input
+        // create message to send down channel to worker thread
         Message *message = malloc(sizeof(Message));
         message->input = input;
         message->streamTo = depotThread->streamTo;
         message->streamFrom = depotThread->streamFrom;
 
         bool output = false;
-        while(!output) { // stop once successfully written
+        while (!output) { // stop once message successfully written
+            // properly lock & unlock mutex.
             pthread_mutex_lock(&depotThread->channelLock);
             output = write_channel(depotThread->channel, message);
             pthread_mutex_unlock(&depotThread->channelLock);
         }
+        // signal that a message is ready
         sem_post(depotThread->signal);
-        // get next message
         fgets(input, BUFSIZ, depotThread->streamFrom);
     }
-
     return NULL;
 }
 
+/**
+ * Function to handle incoming connections on the listening port
+ * @param info - Depot struct holding related data.
+ * @return 0 once
+ */
 int listening(Depot *info) {
+    // create worker thread for processing messages
+    pthread_t tidWorker;
+    ThreadData *worker = malloc(sizeof(ThreadData));
+    worker->depot = info;
+    worker->channel = info->channel;
+    worker->signal = info->signal;
+    worker->channelLock = info->channelLock;
+    pthread_create(&tidWorker, 0, thread_worker, (void *) worker);
+
     // place connections in queue.
     if (listen(info->server, SOMAXCONN)) {
         return 0;
     }
 
-    // create channel & mutex for channel
-    struct Channel *channel = new_channel();
-    pthread_mutex_t channelLock;
-    pthread_mutex_init(&channelLock, NULL);
-
-    // create worker thread
-    pthread_t tid_worker;
-    ThreadData *worker = malloc(sizeof(ThreadData));
-    info->channel = channel;
-    worker->depot = info;
-    worker->channel = channel;
-    worker->signal = info->signal;
-    worker->channelLock = channelLock;
-    pthread_create(&tid_worker, 0, thread_worker, (void *)worker);
-
-
-    int conn_fd;
-    struct sockaddr_in peer_addr;
-    socklen_t addr_size = sizeof(peer_addr);
-    while (conn_fd = accept(info->server, (struct sockaddr *)&peer_addr, &addr_size), conn_fd >= 0) {
-
+    // accept connection
+    int connectionFd;
+    struct sockaddr_in peerAddr;
+    socklen_t addrSize = sizeof(peerAddr);
+    while (connectionFd = accept(info->server, (struct sockaddr *) &peerAddr,
+            &addrSize), connectionFd >= 0) {
         // get streams
-        int fd2 = dup(conn_fd);
-        FILE* streamTo = fdopen(conn_fd, "w");
-        FILE* streamFrom = fdopen(fd2, "r");
+        int dupedFd = dup(connectionFd);
+        FILE *streamTo = fdopen(connectionFd, "w");
+        FILE *streamFrom = fdopen(dupedFd, "r");
 
-        // prevent same port connection todo mutex?
-        for (int i = 0; i < info->neighbourCount; i++ ) {
-            if (info->neighbours[i].addr == ntohs(peer_addr.sin_port)) {
+        // prevent same port connection (mutex as sharing memory with worker)
+        pthread_mutex_lock(&info->dataLock);
+        for (int i = 0; i < info->neighbourCount; i++) {
+            if (info->neighbours[i].addr == ntohs(peerAddr.sin_port)) {
                 continue;
             }
         }
+        pthread_mutex_unlock(&info->dataLock);
 
-//        record_attempt(info, ntohs(peer_addr.sin_port), streamTo, streamFrom);
-        // spin up listening thread
+        // spin up listening thread for the connection
         ThreadData *val = malloc(sizeof(ThreadData));
         val->depot = info;
         val->streamTo = streamTo;
         val->streamFrom = streamFrom;
-        val->channel = channel;
+        val->channel = info->channel;
         val->signal = info->signal;
-        val->channelLock = channelLock;
+        val->channelLock = info->channelLock;
         pthread_t tid;
-        pthread_create(&tid, 0, thread_listen, (void *)val);
+        pthread_create(&tid, 0, thread_listen, (void *) val);
         //pthread_join(tid, NULL);
     }
     return 0;
-
 }
 
+/**
+ * Function to setup port to listen on.
+ * @param info - Depot struct holding related data.
+ */
 void setup_listen(Depot *info) {
-    struct addrinfo* ai = 0;
-    struct addrinfo hints;
-    memset(& hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;        // IPv6  for generic could use AF_UNSPEC
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;  // Because we want to bind with it
-    int err;
-    if ((err = getaddrinfo("localhost", 0, &hints, &ai))) { // no particular port
-        freeaddrinfo(ai);
-        fprintf(stderr, "%s\n", gai_strerror(err));
-        //return 1;   // could not work out the address
+    // create structs for network connection
+    struct addrinfo *addrInfo = 0;
+    struct addrinfo settings;
+    memset(&settings, 0, sizeof(struct addrinfo));
+    settings.ai_family = AF_INET;   // IPv4 connection
+    settings.ai_socktype = SOCK_STREAM;
+    settings.ai_flags = AI_PASSIVE; // bind to the port
+
+    // attempt to get info about the address
+    if (getaddrinfo("localhost", 0, &settings, &addrInfo)) {
+        freeaddrinfo(addrInfo);
     }
 
     // create a socket and bind it to a port
     int serv = socket(AF_INET, SOCK_STREAM, 0); // 0 == use default protocol
-    if (bind(serv, (struct sockaddr*)ai->ai_addr, sizeof(struct sockaddr))) {
-        perror("Binding");
-        //return 3;
-    }
+    bind(serv, (struct sockaddr *) addrInfo->ai_addr, sizeof(struct sockaddr));
 
-    // Which port did we get?
+    // parse the port from related structs
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(struct sockaddr_in));
-    socklen_t len=sizeof(struct sockaddr_in);
-    if (getsockname(serv, (struct sockaddr*)&addr, &len)) {
-        perror("sockname");
-        //return 4;
-    }
+    socklen_t len = sizeof(struct sockaddr_in);
+    getsockname(serv, (struct sockaddr *) &addr, &len);
+
+    // print the port to stdout & save the data
     printf("%u\n", ntohs(addr.sin_port));
     fflush(stdout);
     info->listeningPort = ntohs(addr.sin_port);
     info->server = serv;
 }
 
+/**
+ * Function to allocated required memory
+ * @param info - Depot struct holding related data.
+ */
 void allocate_memory(Depot *info) {
-    // initialise with 1 space
+    // initialise deferred command array
     info->deferred = (Deferred *) malloc(1 * sizeof(Deferred *));
     info->defLength = 1;
     info->defCount = 0;
 
+    // initialise neighbour array
     info->neighbours = malloc(500 * sizeof(Connection));
     info->neighbourCount = 0;
-    info->neighbourLength = 500; // allow many connections todo help
+    info->neighbourLength = 500;
 }
 
-
+/**
+ * Function to add a deferred command
+ * @param arr - array of deferred commands
+ * @param numElements - number of elements in the deferred command array
+ * @param pos - int position to add to
+ * @param cmd - Deferred struct containing command to defer.
+ */
 void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd) {
-    //todo mutex here
     Deferred *temp;
     int tempLength = *numElements + 1;
 
@@ -314,38 +381,71 @@ void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd) {
     *numElements = tempLength;
 }
 
-void* sigmund(void* info) {
-    Depot *data = (Depot*) info;
+/**
+ * Function for thread to wait for SIGHUP signal
+ * @param info - Depot struct holding related data.
+ * @return void pointer
+ */
+void *sigmund(void *info) {
+    // parse Depot struct from void pointer
+    Depot *data = (Depot *) info;
+    // create message to send down channel
+    Message *message = malloc(sizeof(Message));
+    message->sighup = 1;
+
+    // set signal to listen for - SIGHUP
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGHUP);
     int num;
     while (!sigwait(&set, &num)) {  // block here until a signal arrives
-        sighup_print(data);
+        bool output = false;
+
+        // send output down channel (lock appropriately)
+        while (!output) {
+            pthread_mutex_lock(&data->channelLock);
+            output = write_channel(data->channel, message);
+            pthread_mutex_unlock(&data->channelLock);
+            sem_post(data->signal);
+        }
     }
     return 0;
 }
 
-
-int start_up(int argc, char** argv) {
+/**
+ * Function to handle start-up of the depot
+ * @param argc - number of arguments supplied
+ * @param argv - arguments supplied at command line.
+ * @return 0 - normal exit
+ *         2 - Empty name or name contains banned characters
+ *         3 - Quantity parameter is <0 or not a number
+ */
+int start_up(int argc, char **argv) {
     Depot info;
 
     // allocate space for deferred & neighbour lists
     allocate_memory(&info);
 
-    // parse args
+    // parse args from commandline
     int parseStatus = parse(argc, argv, &info);
     if (parseStatus != 0) {
         return parseStatus;
     }
 
+    // create mutex for data and semaphore
     pthread_mutex_t mutex;
     pthread_mutex_init(&mutex, NULL);
-    info.mutex = mutex;
-
+    info.dataLock = mutex;
     sem_t signal;
     sem_init(&signal, 0, 0);
     info.signal = &signal;
+
+    // create channel & mutex for channel
+    struct Channel *channel = new_channel();
+    info.channel = channel;
+    pthread_mutex_t channelLock;
+    pthread_mutex_init(&channelLock, NULL);
+    info.channelLock = channelLock;
 
     // create thread to listen for SIGHUP signal
     pthread_t tid;
@@ -353,19 +453,31 @@ int start_up(int argc, char** argv) {
     sigemptyset(&set);
     sigaddset(&set, SIGHUP);
     pthread_sigmask(SIG_BLOCK, &set, 0);
-    pthread_create(&tid, 0, sigmund, (void *)&info);
+    pthread_create(&tid, 0, sigmund, (void *) &info);
 
-    // listen
+    // setup listening port
     setup_listen(&info);
+
+    // listen on the port for connections
     listening(&info);
 
     return OK;
 }
 
-int main(int argc, char** argv) {
+/**
+ * Function acting as entry point for the program.
+ * @param argc - number of arguments received at command line
+ * @param argv - array of strings representing arguments received.
+ * @return 0 - normal exit
+ *         1 - Incorrect number of arguments
+ *         2 - Empty name or name contains banned characters
+ *         3 - Quantity parameter is < 0 or is not a number
+ */
+int main(int argc, char **argv) {
     if ((argc % 2) != 0 || argc < 2) { // check correct number of args
         return show_message(INCORRARGS);
     } else {
+        // begin the program
         return start_up(argc, argv);
     }
 }

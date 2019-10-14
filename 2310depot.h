@@ -33,7 +33,7 @@ typedef enum {
 
 // struct for items
 typedef struct {
-    char* name;
+    char *name;
     int count;
 } Item;
 
@@ -47,31 +47,32 @@ typedef struct {
 
 // struct for connection
 typedef struct {
-    char* name;
-    char* port;
+    char *name;
+    char *port;
     uint addr;
-    FILE* streamTo;
-    FILE* streamFrom;
+    FILE *streamTo;
+    FILE *streamFrom;
     int neighbourStatus; // 0 for attempted, 1 for confirmed via IM
 } Connection;
 
 
 // struct for the depot
 typedef struct {
-    char* name;
-    Item* items;
+    char *name;
+    Item *items;
     int totalItems;
     int server;
     uint listeningPort;
 
-    Connection* neighbours;
+    Connection *neighbours;
     int neighbourLength;
     int neighbourCount;
 
-    pthread_mutex_t mutex;
+    pthread_mutex_t dataLock;
     sem_t *signal;
 
     struct Channel *channel;
+    pthread_mutex_t channelLock;
 
 
     Deferred *deferred; // int will point to list of def for that key
@@ -92,9 +93,10 @@ typedef struct {
 
 // struct for message down channel
 typedef struct {
-    char* input;
-    FILE* streamTo;
-    FILE* streamFrom;
+    char *input;
+    FILE *streamTo;
+    FILE *streamFrom;
+    int sighup; //whether to print sighup
 } Message;
 
 
@@ -102,7 +104,7 @@ Status show_message(Status s);
 
 void *thread_listen(void *data);
 
-int check_int(char* string);
+int check_int(char *string);
 
 void sighup_print(Depot *data);
 
