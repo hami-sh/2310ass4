@@ -171,12 +171,17 @@ void *thread_listen(void *data) {
         printf(BOLDGREEN "---<%s>---\n" RESET, dest);
 
         bool output = false;
+        printf("1\n");
         while(!output) { // stop once successfully written
             pthread_mutex_lock(&depotThread->channelLock);
+            printf("2\n");
             output = write_channel(depotThread->channel, input);
+            printf("3\n");
             pthread_mutex_unlock(&depotThread->channelLock);
         }
+        printf("3.5\n");
         sem_post(depotThread->signal);
+        printf("4\n");
 
         // get next message
         fgets(input, BUFSIZ, depotThread->streamFrom);

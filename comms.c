@@ -132,6 +132,7 @@ void depot_connect(Depot *info, char* input) {
     val->streamFrom = from;
 
     // record attempted connection
+    printf("Port: %d\n", atoi(port));
     record_attempt(info, atoi(port), to, from);
 
     printf("success\n");
@@ -567,7 +568,7 @@ void debug(Depot *info) {
 
 void process_input(Depot *info, char* input) {
     if (strncmp(input, "Connect", 7) == 0) {
-        depot_(info, input);
+        depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
         depot_im(info, input);
     } else if (strncmp(input, "Deliver", 7) == 0) {
