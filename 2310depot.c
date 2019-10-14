@@ -146,14 +146,14 @@ void sighup_print(Depot *data) {
 
 void *thread_worker(void *data) {
     ThreadData *thread = (ThreadData*) data;
-    while(1) { //todo is this ok?
+    while(1) {
         sem_wait(thread->signal);
-        char *input;
-//        pthread_mutex_lock(&thread->channelLock);
-        read_channel(thread->channel, (void **) &input);
-//        pthread_mutex_unlock(&thread->channelLock);
-        printf("worker read: %s\n", input);
-        process_input(thread->depot, input);
+        Message *message;
+        pthread_mutex_lock(&thread->channelLock);
+        read_channel(thread->channel, (void **) &message);
+        pthread_mutex_unlock(&thread->channelLock);
+        printf("worker read: %s\n", message->input);
+        process_input(thread->depot, message->input);
     }
 }
 
@@ -166,16 +166,22 @@ void *thread_worker(void *data) {
     fgets(input, BUFSIZ, depotThread->streamFrom);
     // keep reading until gameover or EOF from hub
     while (!feof(depotThread->streamFrom)) {
-        // decide what to do on message
+        // decide what to do on message todo remove below
         char* dest = malloc(sizeof(char) * (strlen(input)));
         dest = strncpy(dest, input, strlen(input));
         dest[strlen(input) - 1] = '\0';
         printf(BOLDGREEN "---<%s>---\n" RESET, dest);
+
+        // create input
+        Message *message = malloc(sizeof(Message));
+        message->input = input;
+        message->streamTo = depotThread->streamTo;
+        message->streamFrom = depotThread->streamFrom;
+
         bool output = false;
-        
         while(!output) { // stop once successfully written
             pthread_mutex_lock(&depotThread->channelLock);
-            output = write_channel(depotThread->channel, input);
+            output = write_channel(depotThread->channel, message);
             pthread_mutex_unlock(&depotThread->channelLock);
         }
         sem_post(depotThread->signal);

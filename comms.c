@@ -143,7 +143,7 @@ void depot_connect(Depot *info, char* input) {
     pthread_create(&tid, 0, thread_listen, (void *)val);
 }
 
-int check_illegal_char(char* input, Msg msg) {
+int check_illegal_char(char* input, Command msg) {
     int counter = 0;
     for (int i = 0; i < strlen(input); i++) {
         if (input[i] == ':') {

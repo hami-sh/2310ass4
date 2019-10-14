@@ -15,8 +15,6 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/2310depot.c" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/2310depot.h" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/channel.c" beforeDir="false" afterPath="$PROJECT_DIR$/channel.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/channel.h" beforeDir="false" afterPath="$PROJECT_DIR$/channel.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/comms.c" beforeDir="false" afterPath="$PROJECT_DIR$/comms.c" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -66,7 +64,7 @@
     <property name="node.js.selected.package.tslint" value="(autodetect)" />
     <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
     <property name="nodejs_npm_path_reset_for_default_project" value="true" />
-    <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
+    <property name="settings.editor.selected.configurable" value="reference.settingsdialog.IDE.editor.colors.General" />
   </component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
@@ -128,7 +126,7 @@
       <workItem from="1570925285186" duration="55000" />
       <workItem from="1570926238951" duration="120000" />
       <workItem from="1570926372396" duration="13554000" />
-      <workItem from="1571018241688" duration="9071000" />
+      <workItem from="1571018241688" duration="9725000" />
     </task>
     <servers />
   </component>

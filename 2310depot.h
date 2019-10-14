@@ -29,7 +29,7 @@ typedef enum {
     DEFW = 6,
     DEFT = 7,
     EXE = 8
-} Msg;
+} Command;
 
 // struct for items
 typedef struct {
@@ -42,7 +42,7 @@ typedef struct {
     int key;
     Item *item;
     char *location;
-    Msg command;
+    Command command;
 } Deferred;
 
 // struct for connection
@@ -89,6 +89,14 @@ typedef struct {
     pthread_mutex_t channelLock;
     sem_t *signal;
 } ThreadData;
+
+// struct for message down channel
+typedef struct {
+    char* input;
+    FILE* streamTo;
+    FILE* streamFrom;
+} Message;
+
 
 Status show_message(Status s);
 
