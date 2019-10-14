@@ -54,25 +54,32 @@ void item_remove(Depot *info, Item *new) {
 }
 
 void add_attempt(Connection **list, Connection *item, int *pos, int *numElements) {
-    Connection *temp;
-    int tempLength = *numElements + 1;
-
     /* increment size of list and store element */
-    temp = realloc(*list, tempLength * sizeof(Deferred));
+    const int tempLength = *numElements * 2;
+    printf("before : %d\n", tempLength);
+    Connection *temp = (Connection *)realloc(*list, tempLength * sizeof(Deferred));
+    printf("after : %d\n", tempLength);
     temp[*pos] = *item;
     *pos += 1;
     *list = temp;
     *numElements = tempLength;
+    printf("set : %d\n", *numElements);
 }
 
-void record_attempt(Depot *info, int port, FILE *in, FILE *out) {
+void record_attempt(Depot *info, char* name, int port, FILE *in, FILE *out, int status) {
     Connection *server = malloc(sizeof(Connection));
     pthread_mutex_lock(&info->mutex);
+    server->name = name;
     server->addr = port;
-    server->neighbourStatus = 0;
+    server->neighbourStatus = status;
     server->streamTo = in;
     server->streamFrom = out;
-    add_attempt(&info->neighbours, server, &info->neighbourCount, &info->neighbourLength);
+    if (info->neighbourCount < info->neighbourLength - 1) {
+        info->neighbours[info->neighbourCount] = *server;
+        info->neighbourCount++;
+    } else {
+        add_attempt(&info->neighbours, server, &info->neighbourCount, &info->neighbourLength);
+    }
     pthread_mutex_unlock(&info->mutex);
 }
 
@@ -137,7 +144,7 @@ void depot_connect(Depot *info, char* input) {
     val->signal = info->signal;
 
     // record attempted connection
-    record_attempt(info, atoi(input), to, from);
+//    record_attempt(info, atoi(input), to, from, 0);
 
     printf("success\n");
     pthread_create(&tid, 0, thread_listen, (void *)val);
@@ -181,7 +188,7 @@ int check_illegal_char(char* input, Command msg) {
     return 0;
 }
 
-void depot_im(Depot *info, char* input) {
+void depot_im(Depot *info, char* input, FILE* in, FILE* out) {
     input[strlen(input) - 1] = '\0';
     int checked = check_illegal_char(input, IM);
     if (checked != 0) {
@@ -220,12 +227,13 @@ void depot_im(Depot *info, char* input) {
 //    serverName[strlen(serverName) - 1] = '\0';
 
     // store connection as neighbour
-    for (int i = 0; i < info->neighbourCount; i++) {
-        if (info->neighbours[i].addr == port) {
-            info->neighbours[i].neighbourStatus = 1;
-            info->neighbours[i].name = serverName;
-        }
-    }
+//    for (int i = 0; i < info->neighbourCount; i++) {
+//        if (info->neighbours[i].addr == port) {
+//            info->neighbours[i].neighbourStatus = 1;
+//            info->neighbours[i].name = serverName;
+//        }
+//    }
+    record_attempt(info, serverName, port, in, out, 1);
 }
 
 int depot_deliver(Depot *info, char* input, int key) {
@@ -278,11 +286,11 @@ int depot_deliver(Depot *info, char* input, int key) {
 
     if (key == -1) {
         // instant
-        printf("in: %s %d\n", itemName, quantity);
+//        printf("in: %s %d\n", itemName, quantity);
         item_add(info, new);
     } else {
         // defer action
-        printf("def in: %s %d <%d>\n", itemName, quantity, key);
+//        printf("def in: %s %d <%d>\n", itemName, quantity, key);
         Deferred *cmd = malloc(sizeof(Deferred));
         cmd->key = key;
         cmd->command = DELIVER;
@@ -292,9 +300,9 @@ int depot_deliver(Depot *info, char* input, int key) {
     }
 
     //todo DEBUG REMOVE
-    for (int i = 0; i < info->totalItems; i++) {
-        printf("%s:%d\n", info->items[i].name, info->items[i].count);
-    }
+//    for (int i = 0; i < info->totalItems; i++) {
+//        printf("%s:%d\n", info->items[i].name, info->items[i].count);
+//    }
     return 0;
 
 }
@@ -361,9 +369,9 @@ int depot_withdraw(Depot *info, char* input, int key) {
     }
 
     //todo DEBUG REMOVE
-    for (int i = 0; i < info->totalItems; i++) {
-        printf("%s:%d\n", info->items[i].name, info->items[i].count);
-    }
+//    for (int i = 0; i < info->totalItems; i++) {
+//        printf("%s:%d\n", info->items[i].name, info->items[i].count);
+//    }
     return 0;
 }
 
@@ -571,11 +579,11 @@ void debug(Depot *info) {
 
 }
 
-void process_input(Depot *info, char* input) {
+void process_input(Depot *info, char* input, FILE* in, FILE* out) {
     if (strncmp(input, "Connect", 7) == 0) {
         depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
-        depot_im(info, input);
+        depot_im(info, input, in, out);
     } else if (strncmp(input, "Deliver", 7) == 0) {
         depot_deliver(info, input, -1);
     } else if (strncmp(input, "Withdraw", 8) == 0) {

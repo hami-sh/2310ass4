@@ -9,6 +9,6 @@ int defer_transfer(Depot *info, char *input, char *orig, int key);
 
 void add_attempt(Connection **list, Connection *item, int *pos, int *numElements);
 
-void process_input(Depot *info, char* input);
+void process_input(Depot *info, char* input, FILE* in, FILE* out);
 
 #endif

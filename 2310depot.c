@@ -31,7 +31,9 @@ Status show_message(Status s) {
 //todo remove perror!
 
 int check_int(char* string) {
-    printf("str: %s\n", string);
+    if (strlen(string) == 0) {
+        return -1;
+    }
     for (int i = 0; i < strlen(string); i++) {
         // check integer
         if (string[i] == '.' || string[i] == '-') {
@@ -115,11 +117,13 @@ void lexicographic_sort(Item *array, int itemSize, Connection *connections, int 
     for (int i = 0; i < itemSize; ++i) {
         if (array[i].count != 0) {
             printf("%s %d\n", array[i].name, array[i].count);
+            fflush(stdout);
         }
     }
 
     // neighbours
     printf("Neighbours:\n");
+    fflush(stdout);
     Connection temp;
     for(int i = 0; i < connectionSize; ++i) {
         for(int j = i + 1; j < connectionSize; ++j) {
@@ -133,12 +137,14 @@ void lexicographic_sort(Item *array, int itemSize, Connection *connections, int 
     for (int i = 0; i < connectionSize; ++i) {
         if (connections[i].neighbourStatus == 1) {
             printf("%s\n", connections[i].name);
+            fflush(stdout);
         }
     }
 }
 
 void sighup_print(Depot *data) {
     printf("Goods:\n");
+    fflush(stdout);
     pthread_mutex_lock(&data->mutex);
     lexicographic_sort(data->items, data->totalItems, data->neighbours, data->neighbourCount);
     pthread_mutex_unlock(&data->mutex);
@@ -152,8 +158,8 @@ void *thread_worker(void *data) {
         pthread_mutex_lock(&thread->channelLock);
         read_channel(thread->channel, (void **) &message);
         pthread_mutex_unlock(&thread->channelLock);
-        printf("worker read: %s\n", message->input);
-        process_input(thread->depot, message->input);
+//        printf("worker read: %s\n", message->input);
+        process_input(thread->depot, message->input, message->streamTo, message->streamFrom);
     }
 }
 
@@ -170,7 +176,7 @@ void *thread_worker(void *data) {
         char* dest = malloc(sizeof(char) * (strlen(input)));
         dest = strncpy(dest, input, strlen(input));
         dest[strlen(input) - 1] = '\0';
-        printf(BOLDGREEN "---<%s>---\n" RESET, dest);
+//        printf(BOLDGREEN "---<%s>---\n" RESET, dest);
 
         // create input
         Message *message = malloc(sizeof(Message));
@@ -231,7 +237,7 @@ int listening(Depot *info) {
             }
         }
 
-        record_attempt(info, ntohs(peer_addr.sin_port), streamTo, streamFrom);
+//        record_attempt(info, ntohs(peer_addr.sin_port), streamTo, streamFrom);
         // spin up listening thread
         ThreadData *val = malloc(sizeof(ThreadData));
         val->depot = info;
@@ -278,6 +284,7 @@ void setup_listen(Depot *info) {
         //return 4;
     }
     printf("%u\n", ntohs(addr.sin_port));
+    fflush(stdout);
     info->listeningPort = ntohs(addr.sin_port);
     info->server = serv;
 }
@@ -288,9 +295,9 @@ void allocate_memory(Depot *info) {
     info->defLength = 1;
     info->defCount = 0;
 
-    info->neighbours = malloc(1 * sizeof(Connection));
+    info->neighbours = malloc(500 * sizeof(Connection));
     info->neighbourCount = 0;
-    info->neighbourLength = 1;
+    info->neighbourLength = 500; // allow many connections todo help
 }
 
 
@@ -357,7 +364,7 @@ int start_up(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     if ((argc % 2) != 0 || argc < 2) { // check correct number of args
-        show_message(INCORRARGS);
+        return show_message(INCORRARGS);
     } else {
         return start_up(argc, argv);
     }

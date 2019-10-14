@@ -102,8 +102,6 @@ Status show_message(Status s);
 
 void *thread_listen(void *data);
 
-void record_attempt(Depot *info, int port, FILE *in, FILE *out);
-
 int check_int(char* string);
 
 void sighup_print(Depot *data);

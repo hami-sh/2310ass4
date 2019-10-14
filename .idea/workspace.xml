@@ -16,6 +16,7 @@
       <change beforePath="$PROJECT_DIR$/2310depot.c" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/2310depot.h" beforeDir="false" afterPath="$PROJECT_DIR$/2310depot.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/comms.c" beforeDir="false" afterPath="$PROJECT_DIR$/comms.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/comms.h" beforeDir="false" afterPath="$PROJECT_DIR$/comms.h" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -126,7 +127,7 @@
       <workItem from="1570925285186" duration="55000" />
       <workItem from="1570926238951" duration="120000" />
       <workItem from="1570926372396" duration="13554000" />
-      <workItem from="1571018241688" duration="9725000" />
+      <workItem from="1571018241688" duration="13310000" />
     </task>
     <servers />
   </component>
@@ -145,5 +146,16 @@
         </entry>
       </map>
     </option>
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/comms.c</url>
+          <line>146</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>
