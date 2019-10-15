@@ -184,6 +184,7 @@ void sighup_print(Depot *data) {
     lexicographic_print(data->items, data->totalItems, data->neighbours,
             data->neighbourCount);
     pthread_mutex_unlock(&data->dataLock);
+
 }
 
 /**
@@ -202,6 +203,9 @@ void *thread_worker(void *data) {
         pthread_mutex_lock(&thread->channelLock);
         read_channel(thread->channel, (void **) &message);
         pthread_mutex_unlock(&thread->channelLock);
+
+//        printf("worker read %s\n", message->input);
+//        fflush(stdout);
 
         // perform function of the message
         if (message->sighup == 1) {
@@ -228,17 +232,19 @@ void *thread_listen(void *data) {
 
     /* read messages from the file stream */
     char input[LINESIZE];
+//    char* input = malloc (LINESIZE * sizeof(char));
     fgets(input, BUFSIZ, depotThread->streamFrom);
     // continue until EOF from depot (disconnects)
     while (!feof(depotThread->streamFrom)) {
-//        char* dest = malloc(sizeof(char) * (strlen(input)));
-//        dest = strncpy(dest, input, strlen(input));
+        char* dest = malloc(sizeof(char) * (strlen(input)));
+        dest = strncpy(dest, input, strlen(input));
 //        dest[strlen(input) - 1] = '\0';
 //        printf(BOLDGREEN "---<%s>---\n" RESET, dest);
+//        fflush(stdout);
 
         // create message to send down channel to worker thread
         Message *message = malloc(sizeof(Message));
-        message->input = input;
+        message->input = dest;
         message->streamTo = depotThread->streamTo;
         message->streamFrom = depotThread->streamFrom;
 
@@ -246,6 +252,7 @@ void *thread_listen(void *data) {
         while (!output) { // stop once message successfully written
             // properly lock & unlock mutex.
             pthread_mutex_lock(&depotThread->channelLock);
+//            printf("listener wrote: %s\n", message->input);
             output = write_channel(depotThread->channel, message);
             pthread_mutex_unlock(&depotThread->channelLock);
         }
@@ -262,15 +269,6 @@ void *thread_listen(void *data) {
  * @return 0 once
  */
 int listening(Depot *info) {
-    // create worker thread for processing messages
-    pthread_t tidWorker;
-    ThreadData *worker = malloc(sizeof(ThreadData));
-    worker->depot = info;
-    worker->channel = info->channel;
-    worker->signal = info->signal;
-    worker->channelLock = info->channelLock;
-    pthread_create(&tidWorker, 0, thread_worker, (void *) worker);
-
     // place connections in queue.
     if (listen(info->server, SOMAXCONN)) {
         return 0;
@@ -400,7 +398,6 @@ void *sigmund(void *info) {
     int num;
     while (!sigwait(&set, &num)) {  // block here until a signal arrives
         bool output = false;
-
         // send output down channel (lock appropriately)
         while (!output) {
             pthread_mutex_lock(&data->channelLock);
@@ -454,6 +451,15 @@ int start_up(int argc, char **argv) {
     sigaddset(&set, SIGHUP);
     pthread_sigmask(SIG_BLOCK, &set, 0);
     pthread_create(&tid, 0, sigmund, (void *) &info);
+
+    // create worker thread for processing messages
+    pthread_t tidWorker;
+    ThreadData *worker = malloc(sizeof(ThreadData));
+    worker->depot = &info;
+    worker->channel = info.channel;
+    worker->signal = info.signal;
+    worker->channelLock = info.channelLock;
+    pthread_create(&tidWorker, 0, thread_worker, (void *) worker);
 
     // setup listening port
     setup_listen(&info);

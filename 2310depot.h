@@ -43,6 +43,7 @@ typedef struct {
     Item *item;
     char *location;
     Command command;
+    char *input;
 } Deferred;
 
 // struct for connection

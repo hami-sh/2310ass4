@@ -2,6 +2,8 @@
 #include "2310depot.h"
 #include "comms.h"
 #include "channel.h"
+#include <ctype.h>
+#include <math.h>
 
 /**
  * increase the size of the item array
@@ -83,7 +85,7 @@ void add_attempt(Connection **list, Connection *connection, int *pos,
     /* increment size of list and store element */
     const int tempLength = *numElements * 2;
     Connection *temp = (Connection *) realloc(*list,
-            tempLength * sizeof(Deferred));
+                                              tempLength * sizeof(Deferred));
     temp[*pos] = *connection;
     *pos += 1;
     *list = temp;
@@ -100,7 +102,7 @@ void add_attempt(Connection **list, Connection *connection, int *pos,
  * @param status - integer (1 if confirmed via IM, 0 if not)
  */
 void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
-        int status) {
+                    int status) {
     // create struct and store values. Lock and unlock as required with mutex.
     Connection *server = malloc(sizeof(Connection));
     pthread_mutex_lock(&info->dataLock);
@@ -116,7 +118,7 @@ void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
         info->neighbourCount++;
     } else {
         add_attempt(&info->neighbours, server, &info->neighbourCount,
-                &info->neighbourLength);
+                    &info->neighbourLength);
     }
     pthread_mutex_unlock(&info->dataLock);
 }
@@ -128,7 +130,7 @@ void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
  */
 void depot_connect(Depot *info, char *input) {
     // ensure sting format is ok
-    input[strlen(input) - 1] = '\0';
+    strtok(input, "\n"); // remove extra newlines
     input += 7;
     if (input[0] != ':') {
         return;
@@ -208,38 +210,47 @@ int check_illegal_char(char *input, Command msg) {
         if (input[i] == '\r' || input[i] == ' ') {
             return -1;
         }
-        if (input[i] == '\n' && ((i != strlen(input) - 1)
-            || i != strlen(input))) {
-            printf("%d %lu\n", i, strlen(input));
-            return -1;
+        if (i < strlen(input) - 2) {
+            if (input[i] == '\n') {
+                printf("%d %lu\n", i, strlen(input));
+                printf("%d %lu\n", i, strlen(input) - 1);
+                printf("%d %lu\n", i, strlen(input) - 2);
+                printf("boo\n");
+                return -1;
+            }
         }
+
     }
     if (msg == IM || msg == DELIVER || msg == WITHDRAW) {
         if (counter != 2) {
             return -1;
         }
     }
+
     if (msg == TRANSFER) {
         if (counter != 3) {
             return -1;
         }
     }
+
     if (msg == DEFD || msg == DEFW) {
         if (counter != 4) {
             return -1;
         }
     }
+
     if (msg == DEFT) {
         if (counter != 5) {
             return -1;
         }
     }
 
+
     return 0;
 }
 
 void depot_im(Depot *info, char *input, FILE *in, FILE *out) {
-    input[strlen(input) - 1] = '\0';
+    strtok(input, "\n"); // remove extra newlines
     int checked = check_illegal_char(input, IM);
     if (checked != 0) {
         return;
@@ -287,8 +298,10 @@ void depot_im(Depot *info, char *input, FILE *in, FILE *out) {
 }
 
 int depot_deliver(Depot *info, char *input, int key) {
+    char *inputOrig = malloc(sizeof(char) * strlen(input));
+    strcpy(inputOrig, input);
     if (key == -1) {
-        input[strlen(input) - 1] = '\0';
+        strtok(input, "\n"); // remove extra newlines
     }
     int checked = check_illegal_char(input, DELIVER);
     if (checked != 0) {
@@ -329,7 +342,6 @@ int depot_deliver(Depot *info, char *input, int key) {
     if (strlen(itemName) == 0) {
         return 0;
     }
-
     Item *new = malloc(sizeof(Item));
     new->name = itemName;
     new->count = quantity;
@@ -345,6 +357,7 @@ int depot_deliver(Depot *info, char *input, int key) {
         cmd->key = key;
         cmd->command = DELIVER;
         cmd->item = new;
+        cmd->input = inputOrig;
         add_deferred(&info->deferred, &info->defLength, &info->defCount, cmd);
 
     }
@@ -358,8 +371,10 @@ int depot_deliver(Depot *info, char *input, int key) {
 }
 
 int depot_withdraw(Depot *info, char *input, int key) {
+    char *inputOrig = malloc(sizeof(char) * strlen(input));
+    strcpy(inputOrig, input);
     if (key == -1) {
-        input[strlen(input) - 1] = '\0';
+        strtok(input, "\n"); // remove extra newlines
     }
     int checked = check_illegal_char(input, WITHDRAW);
     if (checked != 0) {
@@ -401,7 +416,7 @@ int depot_withdraw(Depot *info, char *input, int key) {
         return 0;
     }
 
-    printf("out: %s %d\n", itemName, quantity);
+//    printf("out: %s %d\n", itemName, quantity);
     Item *new = malloc(sizeof(Item));
     new->name = itemName;
     new->count = quantity;
@@ -415,6 +430,7 @@ int depot_withdraw(Depot *info, char *input, int key) {
         cmd->key = key;
         cmd->command = WITHDRAW;
         cmd->item = new;
+        cmd->input = inputOrig;
         add_deferred(&info->deferred, &info->defLength, &info->defCount, cmd);
     }
 
@@ -426,8 +442,10 @@ int depot_withdraw(Depot *info, char *input, int key) {
 }
 
 int depot_transfer(Depot *info, char *input, int key) {
+    char *inputOrig = malloc(sizeof(char) * strlen(input));
+    strcpy(inputOrig, input);
     if (key == -1) {
-        input[strlen(input) - 1] = '\0';
+        strtok(input, "\n"); // remove extra newlines
     }
     int checked = check_illegal_char(input, TRANSFER);
     if (checked != 0) {
@@ -483,7 +501,7 @@ int depot_transfer(Depot *info, char *input, int key) {
         return 0;
     }
 
-    printf("transfer %d %s to %s\n", quantity, itemName, serverName);
+//    printf("transfer %d %s to %s\n", quantity, itemName, serverName);
 
     // check if depot present
     FILE *stream = NULL;
@@ -515,6 +533,7 @@ int depot_transfer(Depot *info, char *input, int key) {
         cmd->command = TRANSFER;
         cmd->item = item;
         cmd->location = serverName;
+        cmd->input = inputOrig;
         add_deferred(&info->deferred, &info->defLength, &info->defCount, cmd);
     }
 
@@ -523,7 +542,7 @@ int depot_transfer(Depot *info, char *input, int key) {
 }
 
 int defer(Depot *info, char *input) {
-    input[strlen(input) - 1] = '\0';
+    strtok(input, "\n"); // remove extra newlines
     char *inputOrig = malloc(sizeof(char) * strlen(input));
     strcpy(inputOrig, input);
 
@@ -562,7 +581,6 @@ int defer(Depot *info, char *input) {
     strncpy(order, input, numberLetters);
 
     // store details at key
-    printf("%s <%d>\n", order, key);
     if (strcmp(order, "Deliver") == 0) {
         return defer_deliver(info, input, inputOrig, key);
     } else if (strcmp(order, "Withdraw") == 0) {
@@ -598,6 +616,109 @@ int defer_transfer(Depot *info, char *input, char *orig, int key) {
     return depot_transfer(info, input, key);
 }
 
+///**
+// * Function to return how many digits there are in the supplied number.
+// * @param i - the number to get the digits of
+// * @return the number of digits.
+// */
+//int number_digits(int i) {
+//    if (i == 0) {
+//        return 1;
+//    }
+//    int down = abs(i);
+//    int log = log10(down);
+//    int floor = floor(log);
+//    return floor + 1;
+//}
+//
+//
+//void construct_message(char* dest, Deferred *deferred) {
+//    if (deferred->command == DELIVER) {
+//        // 9 for "deliver::", strlen for item name length & count
+//        dest = malloc((9 + strlen(deferred->item->name) + number_digits(deferred->item->count)) * sizeof(char));
+//        dest
+//    } else if (deferred->command == WITHDRAW) {
+//
+//    } else if (deferred->command == TRANSFER) {
+//
+//    }
+//}
+
+void depot_execute(Depot *info, char *input) {
+    strtok(input, "\n"); // remove extra newlines
+    char *inputOrig = malloc(sizeof(char) * strlen(input));
+    strcpy(inputOrig, input);
+
+//    printf("1\n");
+    input += 7; // remove starting portion of msg
+    if (input[0] != ':') {
+        return; // check formatting
+    }
+    input++;
+
+//    printf("2\n");
+
+    int checkKey = check_int(input);
+    if (checkKey != 0) {
+        return;
+    }
+    int key = atoi(input);
+//    printf("3\n");
+
+//    printf("key: %d\n", key);
+
+    // add commands for worker consumption
+    for (int i = 0; i < info->defCount; i++) {
+        if (key == info->deferred[i].key) {
+            // write commands to channel!
+            Message *message = malloc(sizeof(Message));
+            char *messageInput = malloc((strlen(info->deferred[i].input) + 2) * sizeof(char));
+            strncpy(messageInput, info->deferred[i].input, strlen(info->deferred[i].input));
+//            messageInput[strlen(info->deferred->input) + 1] = ' ';
+//            messageInput[strlen(info->deferred->input) + 2] = '\0';
+            strcat(messageInput, "\n");
+            message->input = messageInput;
+
+
+            bool output = false;
+            while (!output) { // stop once message successfully written
+                // properly lock & unlock mutex.
+                pthread_mutex_lock(&info->channelLock);
+//                printf("execute: %s\n", message->input);
+                output = write_channel(info->channel, message);
+                pthread_mutex_unlock(&info->channelLock);
+            }
+            // signal that a message is ready
+            sem_post(info->signal);
+
+        }
+    }
+
+    // remove commands
+    bool foundKey;
+    do {
+        foundKey = false;
+        int i;
+        for (i = 0; i < info->defCount; i++)
+            if (info->deferred[i].key == key) {
+                foundKey = true;
+                break;
+            }
+
+        if (foundKey == true) {
+            // If command with matching key found in array
+            if (i < info->defCount) {
+                // reduce size of array and shift elements
+                info->defCount = info->defCount - 1;
+                for (int j = i; j < info->defCount; j++)
+                    info->deferred[j] = info->deferred[j + 1];
+            }
+        }
+    } while (foundKey == true);
+
+
+}
+
 void debug(Depot *info) {
     printf("--------(DEBUG)--------\n");
     printf("%s:%u\n", info->name, info->listeningPort);
@@ -611,7 +732,7 @@ void debug(Depot *info) {
             printf("%u\n", info->neighbours[i].addr);
         } else {
             printf("%u <%s>\n", info->neighbours[i].addr,
-                    info->neighbours[i].name);
+                   info->neighbours[i].name);
         }
     }
 
@@ -620,12 +741,12 @@ void debug(Depot *info) {
     for (int i = 0; i < info->defCount; i++) {
         if (info->deferred[i].command == TRANSFER) {
             printf("<%d> %d %s:%d to %s\n", info->deferred[i].key,
-                    info->deferred[i].command,
+                   info->deferred[i].command,
                    info->deferred[i].item->name, info->deferred[i].item->count,
                    info->deferred[i].location);
         } else {
             printf("<%d> %d %s:%d\n", info->deferred[i].key,
-                    info->deferred[i].command,
+                   info->deferred[i].command,
                    info->deferred[i].item->name,
                    info->deferred[i].item->count);
         }
@@ -648,7 +769,7 @@ void process_input(Depot *info, char *input, FILE *in, FILE *out) {
     } else if (strncmp(input, "Defer", 5) == 0) {
         defer(info, input);
     } else if (strncmp(input, "Execute", 7) == 0) {
-//        printf("Execute \n");
+        depot_execute(info, input);
     } else if (strncmp(input, "debug", 5) == 0) {
         debug(info); //todo REMOVE
     } else if (strncmp(input, "sig", 3) == 0) {
