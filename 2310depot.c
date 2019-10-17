@@ -22,9 +22,9 @@
  */
 Status show_message(Status s) {
     const char *messages[] = {"",
-                              "Usage: 2310depot name {goods qty}\n",
-                              "Invalid name(s)\n",
-                              "Invalid quantity\n"};
+            "Usage: 2310depot name {goods qty}\n", 
+            "Invalid name(s)\n",
+            "Invalid quantity\n"};
     fputs(messages[s], stderr);
     return s;
 }
@@ -80,7 +80,7 @@ int parse(int argc, char **argv, Depot *info) {
     // check if there are illegal chars
     for (int i = 0; i < strlen(argv[1]); i++) {
         if ((argv[1][i] == ' ') || (argv[1][i] == '\n') || (argv[1][i] == '\r')
-            || (argv[1][i] == ':')) {
+                || (argv[1][i] == ':')) {
             return show_message(NAMEERR);
         }
     }
@@ -93,11 +93,11 @@ int parse(int argc, char **argv, Depot *info) {
     // loop over items (skipping program name and depot name)
     for (int i = 2; i < argc; i++) {
         if (i % 2 == 0) {
-            // parse item name & check illegal characters
+            // parse item name (every second argv) & check illegal characters
             Item item;
             for (int j = 0; j < strlen(argv[i]); j++) {
                 if ((argv[i][j] == ' ') || (argv[i][j] == '\n')
-                    || (argv[i][j] == '\r') || (argv[i][j] == ':')) {
+                        || (argv[i][j] == '\r') || (argv[i][j] == ':')) {
                     return show_message(NAMEERR);
                 }
             }
@@ -212,7 +212,7 @@ void *thread_worker(void *data) {
             sighup_print(thread->depot);
         } else {
             process_input(thread->depot, message->input, message->streamTo,
-                    message->streamFrom);
+                    message->streamFrom, message->socket);
         }
     }
 }
@@ -232,27 +232,23 @@ void *thread_listen(void *data) {
 
     /* read messages from the file stream */
     char input[LINESIZE];
-//    char* input = malloc (LINESIZE * sizeof(char));
     fgets(input, BUFSIZ, depotThread->streamFrom);
     // continue until EOF from depot (disconnects)
     while (!feof(depotThread->streamFrom)) {
-        char* dest = malloc(sizeof(char) * (strlen(input)));
+        char *dest = malloc(sizeof(char) * (strlen(input)));
         dest = strncpy(dest, input, strlen(input));
-//        dest[strlen(input) - 1] = '\0';
-//        printf(BOLDGREEN "---<%s>---\n" RESET, dest);
-//        fflush(stdout);
 
         // create message to send down channel to worker thread
         Message *message = malloc(sizeof(Message));
         message->input = dest;
         message->streamTo = depotThread->streamTo;
         message->streamFrom = depotThread->streamFrom;
+        message->socket = depotThread->socket;
 
         bool output = false;
         while (!output) { // stop once message successfully written
             // properly lock & unlock mutex.
             pthread_mutex_lock(&depotThread->channelLock);
-//            printf("listener wrote: %s\n", message->input);
             output = write_channel(depotThread->channel, message);
             pthread_mutex_unlock(&depotThread->channelLock);
         }
@@ -292,7 +288,6 @@ int listening(Depot *info) {
                 continue;
             }
         }
-        pthread_mutex_unlock(&info->dataLock);
 
         // spin up listening thread for the connection
         ThreadData *val = malloc(sizeof(ThreadData));
@@ -302,6 +297,9 @@ int listening(Depot *info) {
         val->channel = info->channel;
         val->signal = info->signal;
         val->channelLock = info->channelLock;
+        val->socket = connectionFd;
+        pthread_mutex_unlock(&info->dataLock);
+
         pthread_t tid;
         pthread_create(&tid, 0, thread_listen, (void *) val);
         //pthread_join(tid, NULL);
@@ -342,6 +340,9 @@ void setup_listen(Depot *info) {
     fflush(stdout);
     info->listeningPort = ntohs(addr.sin_port);
     info->server = serv;
+
+    /* block SIGPIPE */
+    signal(SIGPIPE, SIG_IGN);
 }
 
 /**
@@ -387,7 +388,8 @@ void add_deferred(Deferred **arr, int *numElements, int *pos, Deferred *cmd) {
 void *sigmund(void *info) {
     // parse Depot struct from void pointer
     Depot *data = (Depot *) info;
-    // create message to send down channel
+
+    // create message to send down channel for SIGHUP
     Message *message = malloc(sizeof(Message));
     message->sighup = 1;
 
@@ -463,7 +465,6 @@ int start_up(int argc, char **argv) {
 
     // setup listening port
     setup_listen(&info);
-
     // listen on the port for connections
     listening(&info);
 

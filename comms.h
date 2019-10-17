@@ -1,14 +1,19 @@
 #ifndef COMMS_H
 #define COMMS_H
+#include "2310depot.h"
 
-int defer_deliver(Depot *info, char *input, char *inputOriginal, int key);
 
-int defer_withdraw(Depot *info, char *input, char *orig, int key);
+void defer_deliver(Depot *info, char *input, char *inputOriginal, int key);
 
-int defer_transfer(Depot *info, char *input, char *orig, int key);
+void defer_withdraw(Depot *info, char *input, char *orig, int key);
 
-void add_attempt(Connection **list, Connection *connection, int *pos, int *numElements);
+void defer_transfer(Depot *info, char *input, char *orig, int key);
 
-void process_input(Depot *info, char *input, FILE *in, FILE *out);
+void add_connection(Connection **list, Connection *connection, int *pos,
+        int *numElements);
+
+void process_input(Depot *info, char *input, FILE *in, FILE *out, int socket);
+
+void record_attempt(Depot *info, int socket);
 
 #endif

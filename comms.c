@@ -3,7 +3,6 @@
 #include "comms.h"
 #include "channel.h"
 #include <ctype.h>
-#include <math.h>
 
 /**
  * increase the size of the item array
@@ -80,12 +79,12 @@ void item_remove(Depot *info, Item *remove) {
  * @param pos - pointer to integer for position to add connection
  * @param numElements - pointer to integer for length of connection array
  */
-void add_attempt(Connection **list, Connection *connection, int *pos,
-                 int *numElements) {
+void add_connection(Connection **list, Connection *connection, int *pos,
+        int *numElements) {
     /* increment size of list and store element */
     const int tempLength = *numElements * 2;
     Connection *temp = (Connection *) realloc(*list,
-                                              tempLength * sizeof(Deferred));
+            tempLength * sizeof(Deferred));
     temp[*pos] = *connection;
     *pos += 1;
     *list = temp;
@@ -101,8 +100,8 @@ void add_attempt(Connection **list, Connection *connection, int *pos,
  * @param out - file stream from the connection
  * @param status - integer (1 if confirmed via IM, 0 if not)
  */
-void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
-                    int status) {
+void record_neighbour(Depot *info, char *name, int port, FILE *in, FILE *out,
+        int status) {
     // create struct and store values. Lock and unlock as required with mutex.
     Connection *server = malloc(sizeof(Connection));
     pthread_mutex_lock(&info->dataLock);
@@ -117,10 +116,32 @@ void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
         info->neighbours[info->neighbourCount] = *server;
         info->neighbourCount++;
     } else {
-        add_attempt(&info->neighbours, server, &info->neighbourCount,
-                    &info->neighbourLength);
+        add_connection(&info->neighbours, server, &info->neighbourCount,
+                &info->neighbourLength);
     }
     pthread_mutex_unlock(&info->dataLock);
+}
+
+/**
+ * Function to spin up a listening thread for a port
+ * @param info - Depot struct to contain info
+ * @param fileDescriptor - FD opened for the socket
+ */
+void spin_listening_thread(Depot *info, int fileDescriptor) {
+    // create file streams for communication to/from connection
+    int dupFd = dup(fileDescriptor);
+    FILE *to = fdopen(fileDescriptor, "w");
+    FILE *from = fdopen(dupFd, "r");
+
+    // spin up listening thread
+    pthread_t tid;
+    ThreadData *val = malloc(sizeof(ThreadData));
+    val->depot = info;
+    val->streamTo = to;
+    val->streamFrom = from;
+    val->channel = info->channel;
+    val->signal = info->signal;
+    pthread_create(&tid, 0, thread_listen, (void *) val);
 }
 
 /**
@@ -131,27 +152,24 @@ void record_attempt(Depot *info, char *name, int port, FILE *in, FILE *out,
 void depot_connect(Depot *info, char *input) {
     // ensure sting format is ok
     strtok(input, "\n"); // remove extra newlines
-    input += 7;
+    input += 7; // remove CONNECT part of input
     if (input[0] != ':') {
         return;
     }
     input++;
 
-    // get port from msg
-//    char* port = malloc(sizeof(char) * strlen(input));
-//    strcpy(port, input);
-//    printf("port: %s, %lu\n", input, strlen(input));
-
-    // check format of integer
+    // check format of port & ensure no duplicate connections
     if (check_int(input) != 0) {
         return;
     }
-
-    // prevent same port connection
+    int portInt = atoi(input);
+    if (portInt == info->listeningPort) {
+        return; // prevent connection to self
+    }
     pthread_mutex_lock(&info->dataLock);
     for (int i = 0; i < info->neighbourCount; i++) {
         if (info->neighbours[i].addr == atoi(input)) {
-            return;
+            return; // prevent connection to neighbour twice
         }
     }
     pthread_mutex_unlock(&info->dataLock);
@@ -173,25 +191,12 @@ void depot_connect(Depot *info, char *input) {
     // use default protocol
     int fileDescriptor = socket(AF_INET, SOCK_STREAM, 0);
     if (connect(fileDescriptor, (struct sockaddr *) addressInfo->ai_addr,
-                sizeof(struct sockaddr))) {
+            sizeof(struct sockaddr))) {
         return;
     }
 
-    // create file streams for communication to/from connection
-    int dupFd = dup(fileDescriptor);
-    FILE *to = fdopen(fileDescriptor, "w");
-    FILE *from = fdopen(dupFd, "r");
-
-    // spin up listening thread
-    pthread_t tid;
-    ThreadData *val = malloc(sizeof(ThreadData));
-    val->depot = info;
-    val->streamTo = to;
-    val->streamFrom = from;
-    val->channel = info->channel;
-    val->signal = info->signal;
-
-    pthread_create(&tid, 0, thread_listen, (void *) val);
+    // create listening thread
+    spin_listening_thread(info, fileDescriptor);
 }
 
 /**
@@ -203,6 +208,7 @@ void depot_connect(Depot *info, char *input) {
  */
 int check_illegal_char(char *input, Command msg) {
     int counter = 0;
+    // loop over all characters and check formatting
     for (int i = 0; i < strlen(input); i++) {
         if (input[i] == ':') {
             counter++;
@@ -210,222 +216,214 @@ int check_illegal_char(char *input, Command msg) {
         if (input[i] == '\r' || input[i] == ' ') {
             return -1;
         }
-        if (i < strlen(input) - 2) {
+        if (i < strlen(input) - 2) { //todo ok?
             if (input[i] == '\n') {
-                printf("%d %lu\n", i, strlen(input));
-                printf("%d %lu\n", i, strlen(input) - 1);
-                printf("%d %lu\n", i, strlen(input) - 2);
-                printf("boo\n");
                 return -1;
             }
         }
-
     }
+
+    /* check for appropraite number of ':' symbols depending on message type */
     if (msg == IM || msg == DELIVER || msg == WITHDRAW) {
         if (counter != 2) {
             return -1;
         }
     }
-
     if (msg == TRANSFER) {
         if (counter != 3) {
             return -1;
         }
     }
-
-    if (msg == DEFD || msg == DEFW) {
+    if (msg == DEFD || msg == DEFW) { // deferred deliver / withdraw
         if (counter != 4) {
             return -1;
         }
     }
-
-    if (msg == DEFT) {
+    if (msg == DEFT) { // deferred transfer
         if (counter != 5) {
             return -1;
         }
     }
 
-
     return 0;
 }
 
-void depot_im(Depot *info, char *input, FILE *in, FILE *out) {
+/**
+ * Function to handle the reception of the IM message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param in - File stream into the server
+ * @param out - File stream out of the server
+ * return - 0 : successful connection
+ *          -1 : bad IM, disconnect
+ */
+int depot_im(Depot *info, char *input, FILE *in, FILE *out) {
     strtok(input, "\n"); // remove extra newlines
     int checked = check_illegal_char(input, IM);
     if (checked != 0) {
-        return;
+        return -1;
     }
 
-    input += 2;
+    /* check formatting of the message */
+    input += 2; // remove IM part
     if (input[0] != ':') {
-        return;
+        return -1; // check ':' placement
     }
     input++;
 
     int numberDigits = 0;
-    int q = 0;
-    while (input[q] != ':') {
-        numberDigits++;
-        q++;
+    while (input[numberDigits] != ':') {
+        numberDigits++; // count the number of digits in the port
     }
     char *portOrig = malloc(sizeof(char) * numberDigits);
     strncpy(portOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
-        if (!isdigit(portOrig[i])) {
-            return;
+        if (!isdigit(portOrig[i])) { // check that port is in fact a number
+            return -1;
         }
     }
+    int port = atoi(portOrig); // convert port to int
+    if (port < 0 || port > 65535) { // prevent illegal ports
+        return -1;
+    }
 
-    int port = atoi(portOrig);
-    input += numberDigits;
+    // check port not already present
+    pthread_mutex_lock(&info->dataLock);
+    for (int i = 0; i < info->neighbourCount; i++) {
+        if (info->neighbours[i].addr == atoi(input)) {
+            return -1; // prevent connection to neighbour twice
+        }
+    }
+    pthread_mutex_unlock(&info->dataLock);
+
+    input += numberDigits;  // move to next part of message
     if (input[0] != ':') {
-        return;
+        return -1;
     }
     input++;
 
+    // record what is last, the server name - record the connection.
     char *serverName = malloc(sizeof(char) * strlen(input));
     strcpy(serverName, input);
-//    serverName[strlen(serverName) - 1] = '\0';
-
-    // store connection as neighbour
-//    for (int i = 0; i < info->neighbourCount; i++) {
-//        if (info->neighbours[i].addr == port) {
-//            info->neighbours[i].neighbourStatus = 1;
-//            info->neighbours[i].name = serverName;
-//        }
-//    }
-    record_attempt(info, serverName, port, in, out, 1);
+    record_neighbour(info, serverName, port, in, out, 1);
+    return 0;
 }
 
-int depot_deliver(Depot *info, char *input, int key) {
-    char *inputOrig = malloc(sizeof(char) * strlen(input));
-    strcpy(inputOrig, input);
-    if (key == -1) {
-        strtok(input, "\n"); // remove extra newlines
-    }
-    int checked = check_illegal_char(input, DELIVER);
-    if (checked != 0) {
-        return 0;
-    }
-    input += 7;
-    if (input[0] != ':') {
-        return 0;
-    }
-    input++;
-    int numberDigits = 0;
-    int q = 0;
-    while (input[q] != ':') {
-        numberDigits++;
-        q++;
-    }
-    char *quanOrig = malloc(sizeof(char) * numberDigits);
-    strncpy(quanOrig, input, numberDigits);
-    for (int i = 0; i < numberDigits; i++) {
-        if (!isdigit(quanOrig[i])) {
-            return show_message(QUANERR);
-        }
-    }
-
-    int quantity = atoi(quanOrig);
-    input += numberDigits;
-    if (input[0] != ':') {
-        return 0;
-    }
-    input++;
-
-    char *itemName = malloc(sizeof(char) * strlen(input));
-    strcpy(itemName, input);
-
+/**
+ * Function to control the delivery
+ * @param info - Depot struct holding related data.
+ * @param inputOrig - string of command to perform.
+ * @param itemName - string of item name
+ * @param quantity - integer of quantity of item
+ * @param key - deferral key
+ */
+void control_deliver(Depot *info, char *inputOrig, char *itemName,
+        int quantity, int key) {
+    // check quantity and item name for formatting & create item struct
     if (quantity <= 0) {
-        return show_message(QUANERR);
+        return;
     }
     if (strlen(itemName) == 0) {
-        return 0;
+        return;
     }
     Item *new = malloc(sizeof(Item));
     new->name = itemName;
     new->count = quantity;
 
     if (key == -1) {
-        // instant
-//        printf("in: %s %d\n", itemName, quantity);
+        // add item directly to stores (non defer)
         item_add(info, new);
     } else {
-        // defer action
-//        printf("def in: %s %d <%d>\n", itemName, quantity, key);
+        // defer delivering of item
         Deferred *cmd = malloc(sizeof(Deferred));
         cmd->key = key;
         cmd->command = DELIVER;
         cmd->item = new;
         cmd->input = inputOrig;
         add_deferred(&info->deferred, &info->defLength, &info->defCount, cmd);
-
     }
-
-    //todo DEBUG REMOVE
-//    for (int i = 0; i < info->totalItems; i++) {
-//        printf("%s:%d\n", info->items[i].name, info->items[i].count);
-//    }
-    return 0;
-
 }
 
-int depot_withdraw(Depot *info, char *input, int key) {
+/**
+ * Function to handle the deliver message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param key - integer for key if deferring the message
+ */
+void depot_deliver(Depot *info, char *input, int key) {
+    // save the original message string
     char *inputOrig = malloc(sizeof(char) * strlen(input));
     strcpy(inputOrig, input);
     if (key == -1) {
-        strtok(input, "\n"); // remove extra newlines
+        strtok(input, "\n"); // remove extra newlines if new message
     }
-    int checked = check_illegal_char(input, WITHDRAW);
+    // check for illegal characters
+    int checked = check_illegal_char(input, DELIVER);
     if (checked != 0) {
-        return 0;
+        return;
     }
-    input += 8;
+
+    /* check message format */
+    input += 7; // remove DELIVER part of message
     if (input[0] != ':') {
-        return 0;
+        return; // check for ':' symbol
     }
     input++;
     int numberDigits = 0;
-    int q = 0;
-    while (input[q] != ':') {
+    while (input[numberDigits] != ':') {
         numberDigits++;
-        q++;
     }
+    // check quantity portion of message is an integer
     char *quanOrig = malloc(sizeof(char) * numberDigits);
     strncpy(quanOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(quanOrig[i])) {
-            return show_message(QUANERR);
+            return;
         }
     }
-
     int quantity = atoi(quanOrig);
+
+    // move to next part of message & check format
     input += numberDigits;
     if (input[0] != ':') {
-        return 0;
+        return;
     }
     input++;
 
+    // save the item's name (final part of message)
     char *itemName = malloc(sizeof(char) * strlen(input));
     strcpy(itemName, input);
 
+    // continue delivery
+    control_deliver(info, inputOrig, itemName, quantity, key);
+}
+
+/**
+ * Function to control the delivery
+ * @param info - Depot struct holding related data.
+ * @param inputOrig - string of command to perform.
+ * @param itemName - string of item name
+ * @param quantity - integer of quantity of item
+ * @param key - deferral key
+ */
+void control_withdraw(Depot *info, char *inputOrig, char *itemName,
+        int quantity, int key) {
+    // check format of quantity & item name
     if (quantity <= 0) {
-        return show_message(QUANERR);
+        return;
     }
     if (strlen(itemName) == 0) {
-        return 0;
+        return;
     }
-
-//    printf("out: %s %d\n", itemName, quantity);
     Item *new = malloc(sizeof(Item));
     new->name = itemName;
     new->count = quantity;
 
     if (key == -1) {
-        // instant
+        // remove item instantly
         item_remove(info, new);
     } else {
-        // defer
+        // defer withdraw of item
         Deferred *cmd = malloc(sizeof(Deferred));
         cmd->key = key;
         cmd->command = WITHDRAW;
@@ -433,101 +431,112 @@ int depot_withdraw(Depot *info, char *input, int key) {
         cmd->input = inputOrig;
         add_deferred(&info->deferred, &info->defLength, &info->defCount, cmd);
     }
-
-    //todo DEBUG REMOVE
-//    for (int i = 0; i < info->totalItems; i++) {
-//        printf("%s:%d\n", info->items[i].name, info->items[i].count);
-//    }
-    return 0;
 }
 
-int depot_transfer(Depot *info, char *input, int key) {
+/**
+ * Function to handle the withdrawing of an item.
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param key - integer for key if deferring the message
+ */
+void depot_withdraw(Depot *info, char *input, int key) {
+    // save original message
     char *inputOrig = malloc(sizeof(char) * strlen(input));
     strcpy(inputOrig, input);
     if (key == -1) {
-        strtok(input, "\n"); // remove extra newlines
+        strtok(input, "\n"); // remove extra newlines if new message
     }
-    int checked = check_illegal_char(input, TRANSFER);
+
+    // check presence of illegal characters
+    int checked = check_illegal_char(input, WITHDRAW);
     if (checked != 0) {
-        return 0;
+        return;
     }
-    input += 8;
+    input += 8; // remove the CONNECT part of message and check ':' symbol
     if (input[0] != ':') {
-        return 0;
+        return;
     }
     input++;
+
+    // check the quantity of the item to withdraw
     int numberDigits = 0;
-    int q = 0;
-    while (input[q] != ':') {
+    while (input[numberDigits] != ':') {
         numberDigits++;
-        q++;
     }
     char *quanOrig = malloc(sizeof(char) * numberDigits);
     strncpy(quanOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
-        if (!isdigit(quanOrig[i])) {
-            return show_message(QUANERR);
+        if (!isdigit(quanOrig[i])) { // check that quantity is a number
+            return;
         }
     }
+    int quantity = atoi(quanOrig); // convert quantity from sting to int
 
-    int quantity = atoi(quanOrig);
-    input += numberDigits;
+    input += numberDigits; // move to the item part of the message
     if (input[0] != ':') {
-        return 0;
+        return; // check placement of ':' symbol
     }
     input++;
+    char *itemName = malloc(sizeof(char) * strlen(input)); // save name
+    strcpy(itemName, input);
 
-    int itemLength = 0;
-    int j = 0;
-    while (input[j] != ':') {
-        itemLength++;
-        j++;
-    }
-    char *itemName = malloc(sizeof(char) * itemLength);
-    strncpy(itemName, input, itemLength);
-    input += itemLength;
+    // continue withdraw
+    control_withdraw(info, inputOrig, itemName, quantity, key);
+}
 
+/**
+ * Function to control transfer of items between two depots.
+ * @param info - Depot struct holding related data.
+ * @param input - string of input message
+ * @param inputOrig - string of command to perform.
+ * @param itemName - string of item name
+ * @param itemLength - integer length of name of item
+ * @param quantity - integer of quantity of item
+ * @param key - deferral key
+ */
+void control_transfer(Depot *info, char *input, char *inputOrig,
+        char *itemName, int itemLength, int quantity, int key) {
+    input += itemLength; // move to next section (remove item name from string)
     if (input[0] != ':') {
-        return 0;
+        return; // check positioning of ':' symbol
     }
     input++;
-
+    // store the server name
     char *serverName = malloc(sizeof(char) * strlen(input));
     strcpy(serverName, input);
 
+    // check quantity, item name and server name formatting.
     if (quantity <= 0) {
-        return show_message(QUANERR);
+        return;
     } else if (strlen(itemName) == 0 || strlen(serverName) == 0) {
-        return 0;
+        return;
     }
 
-//    printf("transfer %d %s to %s\n", quantity, itemName, serverName);
-
-    // check if depot present
+    // check if depot present so delivery can occur
     FILE *stream = NULL;
     for (int i = 0; i < info->neighbourCount; i++) {
         if (info->neighbours[i].name != NULL) {
             if (strcmp(info->neighbours[i].name, serverName) == 0) {
-                stream = info->neighbours[i].streamTo;
+                stream = info->neighbours[i].streamTo; // successfully found
                 break;
             }
         }
     }
     if (stream == NULL) {
-        return 0;
+        return; // haven't found depot supplied in message
     }
 
-    // remove from us, add to them
+    // remove from this depot, and send message to add to other depot.
     Item *item = malloc(sizeof(Item));
     item->name = itemName;
     item->count = quantity;
     if (key == -1) {
-        // instant
+        // withdraw from this depot and add to other depot via Deliver message
         item_remove(info, item);
         fprintf(stream, "Deliver:%d:%s\n", item->count, item->name);
         fflush(stream);
     } else {
-        // defer
+        // defer transferring of items
         Deferred *cmd = malloc(sizeof(Deferred));
         cmd->key = key;
         cmd->command = TRANSFER;
@@ -536,23 +545,85 @@ int depot_transfer(Depot *info, char *input, int key) {
         cmd->input = inputOrig;
         add_deferred(&info->deferred, &info->defLength, &info->defCount, cmd);
     }
-
-
-    return 0;
 }
 
-int defer(Depot *info, char *input) {
+/**
+ * Function to handle the transfer of items from one depot to another.
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param key - integer for key if deferring the message
+ * @return
+ */
+void depot_transfer(Depot *info, char *input, int key) {
+    // save original string message
+    char *inputOrig = malloc(sizeof(char) * strlen(input));
+    strcpy(inputOrig, input);
+    if (key == -1) {
+        strtok(input, "\n"); // remove extra newlines if deferred message
+    }
+
+    // check presence of illegal characters
+    int checked = check_illegal_char(input, TRANSFER);
+    if (checked != 0) {
+        return;
+    }
+    // move to next part of message (remove TRANSFER section)
+    input += 8;
+    if (input[0] != ':') {
+        return; // check presence of ':' symbol
+    }
+    input++;
+
+    // check number of digits for quantity of item to transfer
+    int numberDigits = 0;
+    while (input[numberDigits] != ':') {
+        numberDigits++;
+    }
+    char *quanOrig = malloc(sizeof(char) * numberDigits);
+    strncpy(quanOrig, input, numberDigits);
+    for (int i = 0; i < numberDigits; i++) {
+        if (!isdigit(quanOrig[i])) { // check if quantity is an integer
+            return;
+        }
+    }
+    int quantity = atoi(quanOrig); // convert string quantity to integer
+
+    input += numberDigits; // remove quantity section of message
+    if (input[0] != ':') {
+        return; // check positioning of ':' symbol
+    }
+    input++;
+
+    // record length of item name & store item name
+    int itemLength = 0;
+    while (input[itemLength] != ':') {
+        itemLength++;
+    }
+    char *itemName = malloc(sizeof(char) * itemLength);
+    strncpy(itemName, input, itemLength);
+
+    control_transfer(info, input, inputOrig, itemName, itemLength,
+            quantity, key);
+}
+
+/**
+ * Function to handle the deferral of a message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ */
+void defer(Depot *info, char *input) {
     strtok(input, "\n"); // remove extra newlines
+    // store original input string
     char *inputOrig = malloc(sizeof(char) * strlen(input));
     strcpy(inputOrig, input);
 
     input += 5; // remove starting portion of msg
     if (input[0] != ':') {
-        return 0; // check formatting
+        return; // check formatting
     }
     input++;
 
-    // get key
+    // get key from the message
     int numberDigits = 0;
     while (input[numberDigits] != ':') {
         numberDigits++;
@@ -561,18 +632,19 @@ int defer(Depot *info, char *input) {
     strncpy(keyOrig, input, numberDigits);
     for (int i = 0; i < numberDigits; i++) {
         if (!isdigit(keyOrig[i])) {
-            return 0;
+            return; // check that key is an unsigned int
         }
     }
+    int key = atoi(keyOrig); // convert string to integer
 
-    int key = atoi(keyOrig);
+    // move to next part of the string (remove key section)
     input += numberDigits;
     if (input[0] != ':') {
-        return 0; // check formatting
+        return; // check formatting of ':'
     }
     input++;
 
-    // get order
+    // get message to perform (deliver, withdraw, transfer)
     int numberLetters = 0;
     while (input[numberLetters] != ':') {
         numberLetters++;
@@ -580,111 +652,92 @@ int defer(Depot *info, char *input) {
     char *order = malloc(sizeof(char) * numberLetters);
     strncpy(order, input, numberLetters);
 
-    // store details at key
+    // store details of the message with it's key
     if (strcmp(order, "Deliver") == 0) {
-        return defer_deliver(info, input, inputOrig, key);
+        defer_deliver(info, input, inputOrig, key);
     } else if (strcmp(order, "Withdraw") == 0) {
-        return defer_withdraw(info, input, inputOrig, key);
+        defer_withdraw(info, input, inputOrig, key);
     } else if (strcmp(order, "Transfer") == 0) {
-        return defer_transfer(info, input, inputOrig, key);
+        defer_transfer(info, input, inputOrig, key);
     }
-    return 0;
-
 }
 
-int defer_deliver(Depot *info, char *input, char *orig, int key) {
+/**
+ * Function to handle the deferral of the delivery message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param orig - original string message
+ * @param key - integer for key if deferring the message
+ */
+void defer_deliver(Depot *info, char *input, char *orig, int key) {
+    // check the original string for formatting issues
     int checked = check_illegal_char(orig, DEFD);
     if (checked != 0) {
-        return 0;
-    }
-    return depot_deliver(info, input, key);
-}
-
-int defer_withdraw(Depot *info, char *input, char *orig, int key) {
-    int checked = check_illegal_char(orig, DEFW);
-    if (checked != 0) {
-        return 0;
-    }
-    return depot_withdraw(info, input, key);
-}
-
-int defer_transfer(Depot *info, char *input, char *orig, int key) {
-    int checked = check_illegal_char(orig, DEFT);
-    if (checked != 0) {
-        return 0;
-    }
-    return depot_transfer(info, input, key);
-}
-
-///**
-// * Function to return how many digits there are in the supplied number.
-// * @param i - the number to get the digits of
-// * @return the number of digits.
-// */
-//int number_digits(int i) {
-//    if (i == 0) {
-//        return 1;
-//    }
-//    int down = abs(i);
-//    int log = log10(down);
-//    int floor = floor(log);
-//    return floor + 1;
-//}
-//
-//
-//void construct_message(char* dest, Deferred *deferred) {
-//    if (deferred->command == DELIVER) {
-//        // 9 for "deliver::", strlen for item name length & count
-//        dest = malloc((9 + strlen(deferred->item->name) + number_digits(deferred->item->count)) * sizeof(char));
-//        dest
-//    } else if (deferred->command == WITHDRAW) {
-//
-//    } else if (deferred->command == TRANSFER) {
-//
-//    }
-//}
-
-void depot_execute(Depot *info, char *input) {
-    strtok(input, "\n"); // remove extra newlines
-    char *inputOrig = malloc(sizeof(char) * strlen(input));
-    strcpy(inputOrig, input);
-
-//    printf("1\n");
-    input += 7; // remove starting portion of msg
-    if (input[0] != ':') {
-        return; // check formatting
-    }
-    input++;
-
-//    printf("2\n");
-
-    int checkKey = check_int(input);
-    if (checkKey != 0) {
         return;
     }
-    int key = atoi(input);
-//    printf("3\n");
 
-//    printf("key: %d\n", key);
+    // defer the delivery with it's key
+    depot_deliver(info, input, key);
+}
 
-    // add commands for worker consumption
+/**
+ * Function to handle the deferral of the withdraw message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param orig - original string message
+ * @param key - integer for key if deferring the message
+ */
+void defer_withdraw(Depot *info, char *input, char *orig, int key) {
+    // check the original string for formatting issues
+    int checked = check_illegal_char(orig, DEFW);
+    if (checked != 0) {
+        return;
+    }
+
+    // defer the delivery with it's key
+    depot_withdraw(info, input, key);
+}
+
+/**
+ * Function to handle the transfer of the withdraw message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param orig - original string message
+ * @param key - integer for key if deferring the message
+ */
+void defer_transfer(Depot *info, char *input, char *orig, int key) {
+    // check the original string for formatting issues
+    int checked = check_illegal_char(orig, DEFT);
+    if (checked != 0) {
+        return;
+    }
+
+    // defer the delivery with it's key
+    depot_transfer(info, input, key);
+}
+
+/**
+ * Control execution of deferred messages
+ * @param info - struct of Depot info
+ * @param key - integer key to execute deferred messages with
+ */
+void control_execute(Depot *info, int key) {
+    /* add commands for worker consumption */
     for (int i = 0; i < info->defCount; i++) {
         if (key == info->deferred[i].key) {
-            // write commands to channel!
+            // create message to send to worker thread down channel
             Message *message = malloc(sizeof(Message));
-            char *messageInput = malloc((strlen(info->deferred[i].input) + 2) * sizeof(char));
-            strncpy(messageInput, info->deferred[i].input, strlen(info->deferred[i].input));
-//            messageInput[strlen(info->deferred->input) + 1] = ' ';
-//            messageInput[strlen(info->deferred->input) + 2] = '\0';
+            char *messageInput = malloc(
+                    (strlen(info->deferred[i].input) + 2) * sizeof(char));
+            strncpy(messageInput, info->deferred[i].input,
+                    strlen(info->deferred[i].input));
             strcat(messageInput, "\n");
             message->input = messageInput;
-
 
             bool output = false;
             while (!output) { // stop once message successfully written
                 // properly lock & unlock mutex.
                 pthread_mutex_lock(&info->channelLock);
-//                printf("execute: %s\n", message->input);
                 output = write_channel(info->channel, message);
                 pthread_mutex_unlock(&info->channelLock);
             }
@@ -694,85 +747,93 @@ void depot_execute(Depot *info, char *input) {
         }
     }
 
-    // remove commands
+    /* remove all message that have been run with given key */
     bool foundKey;
     do {
         foundKey = false;
         int i;
-        for (i = 0; i < info->defCount; i++)
+        // check if any messages have given key
+        for (i = 0; i < info->defCount; i++) {
             if (info->deferred[i].key == key) {
                 foundKey = true;
                 break;
             }
+        }
 
         if (foundKey == true) {
             // If command with matching key found in array
             if (i < info->defCount) {
                 // reduce size of array and shift elements
                 info->defCount = info->defCount - 1;
-                for (int j = i; j < info->defCount; j++)
+                for (int j = i; j < info->defCount; j++) {
                     info->deferred[j] = info->deferred[j + 1];
+                }
             }
         }
-    } while (foundKey == true);
-
-
+    } while (foundKey == true); // continue until all msg with keys removed
 }
 
-void debug(Depot *info) {
-    printf("--------(DEBUG)--------\n");
-    printf("%s:%u\n", info->name, info->listeningPort);
-    printf("Goods:\n");
-    for (int i = 0; i < info->totalItems; i++) {
-        printf("%s:%d\n", info->items[i].name, info->items[i].count);
-    }
-    printf("Neighbours:\n");
-    for (int i = 0; i < info->neighbourCount; i++) {
-        if (info->neighbours[i].neighbourStatus == 0) {
-            printf("%u\n", info->neighbours[i].addr);
-        } else {
-            printf("%u <%s>\n", info->neighbours[i].addr,
-                   info->neighbours[i].name);
-        }
-    }
+/**
+ * Function to execute all deferred message
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ */
+void depot_execute(Depot *info, char *input) {
+    strtok(input, "\n"); // remove extra newlines
+    char *inputOrig = malloc(sizeof(char) * strlen(input));
+    strcpy(inputOrig, input);
 
-    printf("Deferred: ");
-    printf("2:deliver, 3:widthdraw, 4:transfer\n");
-    for (int i = 0; i < info->defCount; i++) {
-        if (info->deferred[i].command == TRANSFER) {
-            printf("<%d> %d %s:%d to %s\n", info->deferred[i].key,
-                   info->deferred[i].command,
-                   info->deferred[i].item->name, info->deferred[i].item->count,
-                   info->deferred[i].location);
-        } else {
-            printf("<%d> %d %s:%d\n", info->deferred[i].key,
-                   info->deferred[i].command,
-                   info->deferred[i].item->name,
-                   info->deferred[i].item->count);
-        }
+    input += 7; // remove starting portion of msg (EXECUTE)
+    if (input[0] != ':') {
+        return; // check formatting of ':' symbol
     }
-    printf("-----------------------\n");
+    input++;
 
+    // check key format and parse from string to int
+    int checkKey = check_int(input);
+    if (checkKey != 0) {
+        return;
+    }
+    int key = atoi(input);
+
+    // continue execution of deferred messages
+    control_execute(info, key);
 }
 
-void process_input(Depot *info, char *input, FILE *in, FILE *out) {
+/**
+ * Function to handle the processing of an input from a given connection
+ * @param info - Depot struct holding related data.
+ * @param input - string of command to perform.
+ * @param in - File stream into the server
+ * @param out - File stream out of the server
+ * @param socket - integer representing file descriptor of socket
+ */
+void process_input(Depot *info, char *input, FILE *in, FILE *out, int socket) {
     if (strncmp(input, "Connect", 7) == 0) {
+        // connect to depot
         depot_connect(info, input);
     } else if (strncmp(input, "IM", 2) == 0) {
-        depot_im(info, input, in, out);
+        int imStatus = depot_im(info, input, in, out);
+        if (imStatus != 0) {
+            // bad IM, disconnect & ignore
+            fclose(in);
+            fclose(out);
+            close(socket);
+        }
     } else if (strncmp(input, "Deliver", 7) == 0) {
+        // deliver items to depot
         depot_deliver(info, input, -1);
     } else if (strncmp(input, "Withdraw", 8) == 0) {
+        // withdraw items from depot
         depot_withdraw(info, input, -1);
     } else if (strncmp(input, "Transfer", 8) == 0) {
+        // transfer items between two IM'd depots
         depot_transfer(info, input, -1);
     } else if (strncmp(input, "Defer", 5) == 0) {
+        // defer message for later use (represented by a key)
         defer(info, input);
     } else if (strncmp(input, "Execute", 7) == 0) {
+        // execute deferred message with a given key
         depot_execute(info, input);
-    } else if (strncmp(input, "debug", 5) == 0) {
-        debug(info); //todo REMOVE
-    } else if (strncmp(input, "sig", 3) == 0) {
-        sighup_print(info);
     }
 }

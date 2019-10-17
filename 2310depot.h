@@ -65,6 +65,10 @@ typedef struct {
     int server;
     uint listeningPort;
 
+    Connection *attempts;
+    int attemptLength;
+    int attemptCount;
+
     Connection *neighbours;
     int neighbourLength;
     int neighbourCount;
@@ -90,6 +94,9 @@ typedef struct {
     pthread_mutex_t lock;
     pthread_mutex_t channelLock;
     sem_t *signal;
+    int socket; // fd for socket
+    int ignore; // ignore further messages
+    int address; // which address did it arrive from
 } ThreadData;
 
 // struct for message down channel
@@ -97,7 +104,9 @@ typedef struct {
     char *input;
     FILE *streamTo;
     FILE *streamFrom;
+    int socket;
     int sighup; //whether to print sighup
+    int address; // address of depot
 } Message;
 
 

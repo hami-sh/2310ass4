@@ -9,7 +9,7 @@
  */
 struct Queue {
     // The data contained in the queue - as an array.
-    void** data;
+    void **data;
     // An offset within that array that points to the beginning of the queue
     // (where new data should be written).
     int writeEnd;
@@ -29,14 +29,14 @@ struct Queue new_queue(void);
  * free). If the function provided is NULL, no clean up will be performed on
  * these elements.
  */
-void destroy_queue(struct Queue* queue, void (*clean)(void*));
+void destroy_queue(struct Queue *queue, void (*clean)(void *));
 
 /*
  * Attempts to write a piece of data to the queue. Takes as arguments a pointer
  * to the queue, and the data being written. Returns true if the attempt was
  * successful, and false if the queue was full and unable to be written to.
  */
-bool write_queue(struct Queue* queue, void* data);
+bool write_queue(struct Queue *queue, void *data);
 
 /*
  * Attempts to read a piece of data from the queue. Takes as arguments a
@@ -45,6 +45,6 @@ bool write_queue(struct Queue* queue, void* data);
  * data. On failure (due to empty queue), returns false and does not touch
  * *output.
  */
-bool read_queue(struct Queue* queue, void** output);
+bool read_queue(struct Queue *queue, void **output);
 
 #endif // _QUEUE_H_

@@ -15,7 +15,7 @@ struct Channel {
 /*
  * Creates (and returns) a new, empty channel, with no data in it.
  */
-struct Channel* new_channel(void);
+struct Channel *new_channel(void);
 
 /*
  * Destroys an old channel. Takes as arguments a pointer to the channel, as
@@ -23,7 +23,7 @@ struct Channel* new_channel(void);
  * example free). If the function provided is NULL, no clean up will be
  * performed on these elements.
  */
-void destroy_channel(struct Channel* channel, void (*clean)(void*));
+void destroy_channel(struct Channel *channel, void (*clean)(void *));
 
 /*
  * Attempts to write a piece of data to the channel. Takes as arguments a
@@ -31,7 +31,7 @@ void destroy_channel(struct Channel* channel, void (*clean)(void*));
  * attempt was successful, and false if the channel was full and unable to be
  * written to.
  */
-bool write_channel(struct Channel* channel, void* data);
+bool write_channel(struct Channel *channel, void *data);
 
 /*
  * Attempts to read a piece of data from the channel. Takes as arguments a
@@ -40,6 +40,6 @@ bool write_channel(struct Channel* channel, void* data);
  * data. On failure (due to empty channel), returns false and does not touch
  * *output.
  */
-bool read_channel(struct Channel* channel, void** output);
+bool read_channel(struct Channel *channel, void **output);
 
 #endif // _CHANNEL_H_
